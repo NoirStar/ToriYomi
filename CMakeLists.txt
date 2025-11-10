@@ -14,6 +14,8 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # Find packages
 find_package(OpenCV REQUIRED)
 find_package(GTest REQUIRED)
+find_package(Tesseract REQUIRED)
+find_package(Leptonica REQUIRED)
 
 # Include directories
 include_directories(
@@ -36,6 +38,21 @@ target_link_libraries(toriyomi_capture
 )
 
 target_include_directories(toriyomi_capture PUBLIC
+	${CMAKE_SOURCE_DIR}/src
+)
+
+# Core library - OCR module
+add_library(toriyomi_ocr
+	src/core/ocr/tesseract_wrapper.cpp
+)
+
+target_link_libraries(toriyomi_ocr
+	${OpenCV_LIBS}
+	${Tesseract_LIBRARIES}
+	${Leptonica_LIBRARIES}
+)
+
+target_include_directories(toriyomi_ocr PUBLIC
 	${CMAKE_SOURCE_DIR}/src
 )
 
@@ -109,3 +126,21 @@ set_target_properties(test_gdi_capture PROPERTIES
 set_target_properties(test_capture_thread PROPERTIES
 	RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
 )
+
+# OCR tests
+add_executable(test_tesseract_wrapper
+	tests/unit/test_tesseract_wrapper.cpp
+)
+
+target_link_libraries(test_tesseract_wrapper
+	toriyomi_ocr
+	GTest::gtest
+	GTest::gtest_main
+	${OpenCV_LIBS}
+)
+
+set_target_properties(test_tesseract_wrapper PROPERTIES
+	RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+)
+
+add_test(NAME TesseractWrapperTest COMMAND test_tesseract_wrapper)
