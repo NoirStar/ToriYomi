@@ -173,6 +173,12 @@ TEST(CaptureTest, captures_frames_at_target_fps) {
 * 단일 책임 함수
 * 구조로 이해를 돕기
 
+### Language Rule
+
+* **모든 주석은 한글로 작성**
+* 함수/클래스 문서화 주석도 한글 사용
+* 영어 기술 용어는 그대로 사용 가능 (예: DXGI, OCR, FPS)
+
 ### Comments Allowed Only For
 
 * "왜" 설명이 필요한 경우
@@ -227,7 +233,7 @@ if (!frame) return;
 | Line length | 120 chars                                            |
 | Memory      | RAII, smart pointers                                 |
 | Errors      | optional / expected                                  |
-| Comments    | Only when unavoidable                                |
+| Comments    | 한글 작성, Only when unavoidable                      |
 | Tests       | GoogleTest + Given/When/Then                         |
 | Logging     | spdlog                                               |
 
