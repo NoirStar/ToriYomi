@@ -1,6 +1,7 @@
 // ToriYomi - Tesseract 래퍼 단위 테스트
-// TesseractWrapper 클래스 테스트
+// TesseractWrapper 클래스 및 OCR 인터페이스 테스트
 
+#include "core/ocr/ocr_engine.h"
 #include "core/ocr/tesseract_wrapper.h"
 #include <gtest/gtest.h>
 #include <opencv2/opencv.hpp>
@@ -145,4 +146,36 @@ TEST_F(TesseractWrapperTest, TextSegmentStructure) {
     EXPECT_EQ(segment.boundingBox.width, 100);
     EXPECT_EQ(segment.boundingBox.height, 50);
     EXPECT_FLOAT_EQ(segment.confidence, 95.5f);
+}
+
+// 테스트 9: 팩토리 패턴으로 엔진 생성
+TEST_F(TesseractWrapperTest, FactoryCreateEngine) {
+    auto engine = OcrEngineFactory::CreateEngine(OcrEngineType::Tesseract);
+    
+    ASSERT_NE(engine, nullptr);
+    EXPECT_EQ(engine->GetEngineName(), "Tesseract");
+    EXPECT_FALSE(engine->IsInitialized());
+    
+    bool result = engine->Initialize(tessdataPath_, "jpn");
+    EXPECT_TRUE(result);
+    EXPECT_TRUE(engine->IsInitialized());
+    
+    engine->Shutdown();
+}
+
+// 테스트 10: 인터페이스를 통한 다형성 사용
+TEST_F(TesseractWrapperTest, PolymorphicUsage) {
+    std::unique_ptr<IOcrEngine> engine = std::make_unique<TesseractWrapper>();
+    
+    EXPECT_EQ(engine->GetEngineName(), "Tesseract");
+    
+    bool result = engine->Initialize(tessdataPath_, "jpn");
+    EXPECT_TRUE(result);
+    
+    cv::Mat testImage(100, 300, CV_8UC3, cv::Scalar(255, 255, 255));
+    auto results = engine->RecognizeText(testImage);
+    
+    std::cout << "Polymorphic test: Recognized " << results.size() << " segments" << std::endl;
+    
+    engine->Shutdown();
 }

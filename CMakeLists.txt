@@ -43,6 +43,7 @@ target_include_directories(toriyomi_capture PUBLIC
 
 # Core library - OCR module
 add_library(toriyomi_ocr
+	src/core/ocr/ocr_engine.cpp
 	src/core/ocr/tesseract_wrapper.cpp
 )
 

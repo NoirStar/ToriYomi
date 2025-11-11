@@ -148,5 +148,9 @@ bool TesseractWrapper::IsInitialized() const {
     return pImpl_->initialized;
 }
 
+std::string TesseractWrapper::GetEngineName() const {
+    return "Tesseract";
+}
+
 }  // namespace ocr
 }  // namespace toriyomi
