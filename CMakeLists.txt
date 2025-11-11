@@ -83,6 +83,7 @@ target_compile_options(toriyomi_tokenizer PRIVATE /utf-8)
 # UI library - Overlay module
 add_library(toriyomi_overlay
 	src/ui/overlay/overlay_window.cpp
+	src/ui/overlay/overlay_thread.cpp
 )
 
 target_link_libraries(toriyomi_overlay
@@ -270,3 +271,25 @@ set_target_properties(test_overlay_window PROPERTIES
 target_compile_options(test_overlay_window PRIVATE /utf-8)
 
 add_test(NAME OverlayWindowTest COMMAND test_overlay_window)
+
+# Overlay Thread tests
+add_executable(test_overlay_thread
+	tests/unit/test_overlay_thread.cpp
+)
+
+target_link_libraries(test_overlay_thread
+	toriyomi_overlay
+	toriyomi_tokenizer
+	GTest::gtest
+	GTest::gtest_main
+	${OpenCV_LIBS}
+)
+
+set_target_properties(test_overlay_thread PROPERTIES
+	RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+)
+
+# UTF-8 인코딩 설정
+target_compile_options(test_overlay_thread PRIVATE /utf-8)
+
+add_test(NAME OverlayThreadTest COMMAND test_overlay_thread)
