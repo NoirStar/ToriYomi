@@ -46,9 +46,11 @@ target_include_directories(toriyomi_capture PUBLIC
 add_library(toriyomi_ocr
 	src/core/ocr/ocr_engine.cpp
 	src/core/ocr/tesseract_wrapper.cpp
+	src/core/ocr/ocr_thread.cpp
 )
 
 target_link_libraries(toriyomi_ocr
+	toriyomi_capture
 	${OpenCV_LIBS}
 	C:/vcpkg/installed/x64-windows/lib/tesseract55.lib
 	C:/vcpkg/installed/x64-windows/lib/leptonica-1.85.0.lib
@@ -146,3 +148,21 @@ set_target_properties(test_tesseract_wrapper PROPERTIES
 )
 
 add_test(NAME TesseractWrapperTest COMMAND test_tesseract_wrapper)
+
+# OCR Thread tests
+add_executable(test_ocr_thread
+	tests/unit/test_ocr_thread.cpp
+)
+
+target_link_libraries(test_ocr_thread
+	toriyomi_ocr
+	GTest::gtest
+	GTest::gtest_main
+	${OpenCV_LIBS}
+)
+
+set_target_properties(test_ocr_thread PROPERTIES
+	RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+)
+
+add_test(NAME OcrThreadTest COMMAND test_ocr_thread)
