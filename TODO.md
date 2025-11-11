@@ -1,12 +1,99 @@
 # ToriYomi 개발 진행 상황
 
-**최종 업데이트**: 2025-11-10
+**최종 업데이트**: 2025-11-11
 
 ---
 
 ## ✅ 완료된 단계
 
-### Phase 1-1: FrameQueue 구현 ✅
+### Phase 1: 화면 캡처 (100% 완료) ✅
+- **Phase 1-1**: FrameQueue (스레드 안전, 8개 테스트 통과)
+- **Phase 1-2**: DXGI Capture (141 FPS, 8개 테스트 통과)
+- **Phase 1-3**: GDI Fallback (44 FPS, 9개 테스트 통과)
+- **Phase 1-4**: CaptureThread (32 FPS with 변경 감지, 3개 테스트 통과)
+
+### Phase 2: OCR (100% 완료) ✅
+- **Phase 2-1**: Tesseract Wrapper (IOcrEngine 인터페이스, 10개 테스트 통과, 89.5% 신뢰도)
+- **Phase 2-2**: OCR Thread (비동기 처리, 8개 테스트 통과)
+
+### Phase 3: 일본어 토큰화 (50% 완료)
+- **Phase 3-1**: 일본어 토크나이저 ✅ (MeCab 통합, 11개 테스트 통과, ~100k tokens/sec)
+- **Phase 3-2**: 후리가나 매퍼 (진행 예정)
+
+### Phase 4: Overlay UI (100% 완료) ✅
+- **Phase 4-1**: 오버레이 윈도우 ✅ (투명 레이어드 윈도우, 14개 테스트 통과)
+- **Phase 4-2**: 오버레이 스레드 ✅ (비동기 렌더링, 11개 테스트 통과)
+
+### Phase 5: Qt 데스크톱 앱 (70% 완료)
+- **Phase 5-1**: 기본 UI 구현 ✅
+  - Qt 6.10.0 MSVC 2022 설정
+  - AUTOUIC 빌드타임 컴파일
+  - 프로세스 선택 (한글 프로세스명 지원)
+  - ROI 선택 (DraggableImageLabel, 800x550 최대)
+  - InteractiveSentenceWidget (단어별 클릭)
+  - PrintWindow API 화면 캡처
+  
+- **Phase 5-2**: 파이프라인 통합 🚧 (진행 중)
+  - ✅ Start/Stop 버튼 (초록/빨강 스타일)
+  - ✅ QTimer::singleShot 비동기 초기화 (UI 응답성 유지)
+  - ✅ 디버그 로그 패널 (타임스탬프, 실시간 로깅)
+  - ✅ sentenceListWidget visible=false 처리
+  - ✅ OnPollOcrResults QTimer 폴링 (100ms)
+  - ✅ 캡처 → OCR → 토큰화 파이프라인 구조
+  - ✅ 테스트 AUTOMOC/AUTOUIC 비활성화 (빌드 속도 개선)
+  - ⚠️ **Known Issue**: Tesseract 초기화 실패 (jpn.traineddata 경로 문제)
+  
+- **Phase 5-3**: 사전 & Anki 통합 (진행 예정)
+
+---
+
+## 🔄 진행 중
+
+### Phase 5-2: 파이프라인 통합 (다음 작업)
+**블로커**: Tesseract OCR 엔진 초기화 실패
+- jpn.traineddata 파일 경로 확인 필요
+- TESSDATA_PREFIX 환경 변수 설정
+- 또는 Initialize() 파라미터로 명시적 경로 전달
+
+---
+
+## 📋 대기 중
+
+### Phase 5-3: 사전 & Anki 통합
+- JMdict 또는 EDICT2 사전 데이터베이스
+- 단어 검색 및 정의 표시
+- AnkiConnect API 통합
+- 카드 자동 생성
+
+### Phase 6: 성능 최적화
+- 레이턴시 측정 및 개선
+- CPU/메모리 프로파일링
+- 프레임 캐싱 전략
+
+### Phase 7: 배포 준비
+- 설치 프로그램 (의존성 번들)
+- 사용자 설정 저장/로드
+- 에러 리포팅
+
+### Phase 8: 통합 테스트
+- 엔드투엔드 시나리오
+- 실제 게임 화면 테스트
+- 사용성 개선
+
+---
+
+## 📊 전체 진행률
+
+```
+Phase 1 (캡처):    ████████ 100% (4/4) ✅
+Phase 2 (OCR):     ████████ 100% (2/2) ✅
+Phase 3 (토큰):    ████░░░░  50% (1/2)
+Phase 4 (Overlay): ████████ 100% (2/2) ✅
+Phase 5 (Qt App):  ██████░░  70% (진행 중)
+Phase 6-8:         ░░░░░░░░   0% (대기)
+```
+
+**전체**: 8/14 완료, 1 진행 중 (65%)
 **완료일**: 2025-11-10  
 **파일**: 
 - `src/core/capture/frame_queue.h`

@@ -127,6 +127,9 @@ QPushButton:pressed {
       <height>291</height>
      </rect>
     </property>
+    <property name="visible">
+     <bool>false</bool>
+    </property>
    </widget>
    <widget class="QTextEdit" name="dictionaryTextEdit">
     <property name="geometry">
@@ -134,15 +137,31 @@ QPushButton:pressed {
       <x>40</x>
       <y>310</y>
       <width>521</width>
-      <height>371</height>
+      <height>221</height>
      </rect>
+    </property>
+   </widget>
+   <widget class="QTextEdit" name="debugLogTextEdit">
+    <property name="geometry">
+     <rect>
+      <x>40</x>
+      <y>540</y>
+      <width>521</width>
+      <height>141</height>
+     </rect>
+    </property>
+    <property name="readOnly">
+     <bool>true</bool>
+    </property>
+    <property name="placeholderText">
+     <string>Debug Log (개발용)</string>
     </property>
    </widget>
    <widget class="QPushButton" name="ankiButton">
     <property name="geometry">
      <rect>
-      <x>130</x>
-      <y>600</y>
+      <x>440</x>
+      <y>470</y>
       <width>81</width>
       <height>41</height>
      </rect>
@@ -171,7 +190,66 @@ QPushButton:pressed {
      </rect>
     </property>
     <property name="text">
-     <string>화면 일부만 캡쳐</string>
+     <string>캡쳐 영역 선택</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="startCaptureButton">
+    <property name="geometry">
+     <rect>
+      <x>660</x>
+      <y>430</y>
+      <width>181</width>
+      <height>51</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">
+      QPushButton {
+        background-color: #14a085;
+        color: white;
+        font-weight: bold;
+      }
+      QPushButton:hover {
+        background-color: #0d7377;
+      }
+      QPushButton:disabled {
+        background-color: #555555;
+      }
+     </string>
+    </property>
+    <property name="text">
+     <string>Start Capture</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="stopCaptureButton">
+    <property name="enabled">
+     <bool>false</bool>
+    </property>
+    <property name="geometry">
+     <rect>
+      <x>660</x>
+      <y>490</y>
+      <width>181</width>
+      <height>51</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">
+      QPushButton {
+        background-color: #c0392b;
+        color: white;
+        font-weight: bold;
+      }
+      QPushButton:hover {
+        background-color: #e74c3c;
+      }
+      QPushButton:disabled {
+        background-color: #555555;
+      }
+     </string>
+    </property>
+    <property name="text">
+     <string>Stop Capture</string>
     </property>
    </widget>
   </widget>

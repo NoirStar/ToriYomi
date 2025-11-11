@@ -185,7 +185,7 @@ ToriYomi/
 
 ### 현재 진행 상황
 
-**전체 진행률: 43% (6/14 phases 완료)**
+**전체 진행률: 65% (8/14 phases 완료, 1 진행 중)**
 
 #### ✅ Phase 1: 화면 캡처 (100% 완료)
 - [x] **Phase 1-1**: FrameQueue 구현
@@ -212,11 +212,33 @@ ToriYomi/
   - 성능: ~100,000 tokens/sec
 - [ ] **Phase 3-2**: 후리가나 매퍼 (진행 예정)
 
-#### 🚧 Phase 4~8: 진행 예정
-- [ ] Phase 4: Overlay UI (후리가나 렌더링)
-- [ ] Phase 5: Qt 데스크톱 앱
-- [ ] Phase 6: 사전 통합
-- [ ] Phase 7: Anki 통합
+#### ✅ Phase 4: Overlay UI (100% 완료)
+- [x] **Phase 4-1**: 오버레이 윈도우
+  - Win32 투명 레이어드 윈도우, 항상 위, 클릭 투과
+  - 14개 테스트 통과
+- [x] **Phase 4-2**: 오버레이 스레드
+  - 비동기 렌더링, 후리가나 표시
+  - 11개 테스트 통과
+
+#### 🚧 Phase 5: Qt 데스크톱 앱 (70% 완료)
+- [x] **Phase 5-1**: 기본 UI 구현
+  - Qt 6.10.0 MSVC 2022 설정
+  - AUTOUIC 빌드타임 컴파일
+  - 프로세스 선택 (한글 프로세스명 지원)
+  - ROI 선택 (DraggableImageLabel, 800x550 최대)
+  - InteractiveSentenceWidget (단어별 클릭)
+  - PrintWindow API 화면 캡처
+- [x] **Phase 5-2**: 파이프라인 통합 (진행 중)
+  - Start/Stop 버튼 (비동기 초기화)
+  - 디버그 로그 패널 (타임스탬프, 실시간)
+  - QTimer 폴링 방식 (100ms)
+  - 캡처 → OCR → 토큰화 파이프라인
+  - **Known Issue**: Tesseract 초기화 실패 (경로 문제)
+- [ ] **Phase 5-3**: 사전 & Anki 통합 (진행 예정)
+
+#### 🚧 Phase 6~8: 진행 예정
+- [ ] Phase 6: 사전 통합 (JMdict/EDICT2)
+- [ ] Phase 7: Anki 통합 (AnkiConnect)
 - [ ] Phase 8: 통합 테스트 & 최적화
 
 상세 로드맵: [TODO.md](TODO.md)

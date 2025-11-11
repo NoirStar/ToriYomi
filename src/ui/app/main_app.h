@@ -2,8 +2,14 @@
 #pragma once
 
 #include "interactive_sentence_widget.h"
+#include "core/capture/capture_thread.h"
+#include "core/capture/frame_queue.h"
+#include "core/ocr/ocr_thread.h"
+#include "core/ocr/tesseract_wrapper.h"
+#include "core/tokenizer/japanese_tokenizer.h"
 #include <QMainWindow>
 #include <QLayout>
+#include <QTimer>
 #include <Windows.h>
 #include <memory>
 #include <vector>
@@ -62,6 +68,12 @@ public:
     void UpdateFps(double fps);
 
     /**
+     * @brief 디버그 로그 추가
+     * @param message 로그 메시지
+     */
+    void LogDebug(const QString& message);
+
+    /**
      * @brief 선택된 ROI 영역 가져오기
      */
     cv::Rect GetSelectedRoi() const { return selectedRoi_; }
@@ -93,6 +105,26 @@ private slots:
      * @brief ROI 선택 버튼 클릭 핸들러
      */
     void OnSelectRoiClicked();
+
+    /**
+     * @brief 캡처 시작 버튼 클릭 핸들러
+     */
+    void OnStartCaptureClicked();
+
+    /**
+     * @brief 캡처 정지 버튼 클릭 핸들러
+     */
+    void OnStopCaptureClicked();
+
+    /**
+     * @brief OCR 결과 폴링 타이머 핸들러
+     */
+    void OnPollOcrResults();
+
+    /**
+     * @brief 비동기 스레드 초기화 완료 핸들러
+     */
+    void OnThreadsInitialized();
 
 private:
     /**
@@ -126,10 +158,30 @@ private:
                             const std::string& reading,
                             const std::string& baseForm);
 
+    /**
+     * @brief 캡처/OCR 스레드 시작
+     */
+    void StartThreads();
+
+    /**
+     * @brief 캡처/OCR 스레드 정지
+     */
+    void StopThreads();
+
 private:
     Ui::MainWindow* ui_;  // AUTOUIC가 생성한 UI 클래스
     
     InteractiveSentenceWidget* sentenceWidget_;  // 인터랙티브 문장 위젯
+
+    // 스레드 및 공유 큐
+    std::shared_ptr<FrameQueue> frameQueue_;
+    std::unique_ptr<capture::CaptureThread> captureThread_;
+    std::unique_ptr<ocr::OcrThread> ocrThread_;
+    std::unique_ptr<ocr::TesseractWrapper> ocrEngine_;  // OCR 엔진 (재사용)
+    std::unique_ptr<tokenizer::JapaneseTokenizer> tokenizer_;
+    
+    QTimer* pollTimer_;    // OCR 결과 폴링 타이머
+    bool isCapturing_;     // 캡처 중 여부
 
     // 데이터
     std::string currentWord_;                    // 현재 선택된 단어

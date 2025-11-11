@@ -114,6 +114,8 @@ add_library(toriyomi_app
 )
 
 target_link_libraries(toriyomi_app
+	toriyomi_capture
+	toriyomi_ocr
 	toriyomi_tokenizer
 	Qt6::Widgets
 	Qt6::UiTools
@@ -134,6 +136,8 @@ add_executable(ToriYomiApp WIN32
 
 target_link_libraries(ToriYomiApp
 	toriyomi_app
+	toriyomi_capture
+	toriyomi_ocr
 	toriyomi_tokenizer
 	Qt6::Widgets
 	Qt6::UiTools
@@ -150,6 +154,11 @@ target_compile_options(ToriYomiApp PRIVATE /utf-8 /Zc:__cplusplus)
 
 # Enable testing
 enable_testing()
+
+# 테스트는 Qt를 사용하지 않으므로 AUTOMOC/AUTOUIC 비활성화
+set(CMAKE_AUTOMOC OFF)
+set(CMAKE_AUTOUIC OFF)
+set(CMAKE_AUTORCC OFF)
 
 # Unit tests
 add_executable(test_frame_queue
@@ -205,18 +214,26 @@ add_test(NAME CaptureThreadTest COMMAND test_capture_thread)
 # Test executable properties
 set_target_properties(test_frame_queue PROPERTIES
 	RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+	AUTOMOC OFF
+	AUTOUIC OFF
 )
 
 set_target_properties(test_dxgi_capture PROPERTIES
 	RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+	AUTOMOC OFF
+	AUTOUIC OFF
 )
 
 set_target_properties(test_gdi_capture PROPERTIES
 	RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+	AUTOMOC OFF
+	AUTOUIC OFF
 )
 
 set_target_properties(test_capture_thread PROPERTIES
 	RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+	AUTOMOC OFF
+	AUTOUIC OFF
 )
 
 # OCR tests
@@ -233,6 +250,8 @@ target_link_libraries(test_tesseract_wrapper
 
 set_target_properties(test_tesseract_wrapper PROPERTIES
 	RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+	AUTOMOC OFF
+	AUTOUIC OFF
 )
 
 add_test(NAME TesseractWrapperTest COMMAND test_tesseract_wrapper)
@@ -251,6 +270,8 @@ target_link_libraries(test_ocr_thread
 
 set_target_properties(test_ocr_thread PROPERTIES
 	RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+	AUTOMOC OFF
+	AUTOUIC OFF
 )
 
 add_test(NAME OcrThreadTest COMMAND test_ocr_thread)
@@ -270,6 +291,8 @@ target_link_libraries(test_japanese_tokenizer
 
 set_target_properties(test_japanese_tokenizer PROPERTIES
 	RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+	AUTOMOC OFF
+	AUTOUIC OFF
 )
 
 # UTF-8 인코딩 설정 (일본어 문자열 지원)
@@ -292,6 +315,8 @@ target_link_libraries(test_furigana_mapper
 
 set_target_properties(test_furigana_mapper PROPERTIES
 	RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+	AUTOMOC OFF
+	AUTOUIC OFF
 )
 
 # UTF-8 인코딩 설정 (일본어 문자열 지원)
@@ -314,6 +339,8 @@ target_link_libraries(test_overlay_window
 
 set_target_properties(test_overlay_window PROPERTIES
 	RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+	AUTOMOC OFF
+	AUTOUIC OFF
 )
 
 # UTF-8 인코딩 설정
@@ -336,6 +363,8 @@ target_link_libraries(test_overlay_thread
 
 set_target_properties(test_overlay_thread PROPERTIES
 	RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+	AUTOMOC OFF
+	AUTOUIC OFF
 )
 
 # UTF-8 인코딩 설정
