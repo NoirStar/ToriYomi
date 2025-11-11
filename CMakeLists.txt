@@ -16,6 +16,7 @@ find_package(OpenCV REQUIRED)
 find_package(GTest REQUIRED)
 find_package(Tesseract REQUIRED)
 find_package(Leptonica REQUIRED)
+find_package(mecab CONFIG REQUIRED)
 
 # Include directories
 include_directories(
@@ -59,6 +60,24 @@ target_link_libraries(toriyomi_ocr
 target_include_directories(toriyomi_ocr PUBLIC
 	${CMAKE_SOURCE_DIR}/src
 )
+
+# Core library - Tokenizer module
+add_library(toriyomi_tokenizer
+	src/core/tokenizer/japanese_tokenizer.cpp
+)
+
+target_link_libraries(toriyomi_tokenizer
+	${OpenCV_LIBS}
+	"C:/Program Files/MeCab/sdk/libmecab.lib"
+)
+
+target_include_directories(toriyomi_tokenizer PUBLIC
+	${CMAKE_SOURCE_DIR}/src
+	"C:/Program Files/MeCab/sdk"
+)
+
+# UTF-8 인코딩 설정 (일본어 문자열 지원)
+target_compile_options(toriyomi_tokenizer PRIVATE /utf-8)
 
 # Enable testing
 enable_testing()
@@ -166,3 +185,26 @@ set_target_properties(test_ocr_thread PROPERTIES
 )
 
 add_test(NAME OcrThreadTest COMMAND test_ocr_thread)
+
+# Tokenizer tests
+add_executable(test_japanese_tokenizer
+	tests/unit/test_japanese_tokenizer.cpp
+)
+
+target_link_libraries(test_japanese_tokenizer
+	toriyomi_tokenizer
+	toriyomi_ocr
+	GTest::gtest
+	GTest::gtest_main
+	${OpenCV_LIBS}
+)
+
+set_target_properties(test_japanese_tokenizer PROPERTIES
+	RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+)
+
+# UTF-8 인코딩 설정 (일본어 문자열 지원)
+target_compile_options(test_japanese_tokenizer PRIVATE /utf-8)
+
+add_test(NAME JapaneseTokenizerTest COMMAND test_japanese_tokenizer)
+

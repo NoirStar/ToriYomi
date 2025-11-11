@@ -65,26 +65,35 @@ ToriYomi는 일본어 게임 플레이 중 **실시간으로 한자에 후리가
 - **컴파일러**: MSVC 2022 (C++20)
 - **CMake**: 3.20 이상
 - **의존성**:
-  - OpenCV 4.8+
-  - Qt 6.5+
-  - Tesseract 5.0+
-  - Google Test 1.12+
+  - OpenCV 4.11+
+  - Tesseract 5.5+
+  - MeCab 0.996+ (일본어 형태소 분석)
+  - Google Test 1.17+
+  - Qt 6.5+ (Phase 5에서 사용 예정)
 
 ### 🔧 설치
 
 #### 1. vcpkg로 의존성 설치
 
 ```powershell
-# vcpkg 설치
-git clone https://github.com/Microsoft/vcpkg.git
-cd vcpkg
+# vcpkg 설치 (C:\vcpkg 권장)
+git clone https://github.com/Microsoft/vcpkg.git C:\vcpkg
+cd C:\vcpkg
 .\bootstrap-vcpkg.bat
 .\vcpkg integrate install
 
 # 라이브러리 설치
+$env:TEMP="C:\Temp"; $env:TMP="C:\Temp"  # vcpkg 빌드 임시 경로 설정
 .\vcpkg install opencv:x64-windows
 .\vcpkg install gtest:x64-windows
-.\vcpkg install qt6:x64-windows  # (추후 Phase 5에서 사용)
+.\vcpkg install tesseract:x64-windows
+.\vcpkg install leptonica:x64-windows
+.\vcpkg install mecab:x64-windows
+
+# MeCab 일본어 사전 설치 (별도)
+# https://github.com/ikegami-yukino/mecab/releases에서
+# mecab-0.996-64.exe 다운로드 및 설치
+# 설치 경로: C:\Program Files\MeCab
 ```
 
 #### 2. 프로젝트 빌드
@@ -120,35 +129,48 @@ ToriYomi/
 ├── build.ps1                   # 빌드 자동화 스크립트
 ├── README.md                   # 프로젝트 소개 (이 파일)
 ├── BUILD.md                    # 상세 빌드 가이드
+├── QUICKSTART.md               # 빠른 시작 가이드
+├── TODO.md                     # 개발 진행 상황
 ├── docs/
 │   ├── spec.md                 # 기술 명세서
-│   └── code-style.md           # 코드 스타일 가이드
+│   ├── code-style.md           # 코드 스타일 가이드 (한글 주석 필수)
+│   ├── ocr-engine-design.md    # OCR 엔진 추상화 설계
+│   └── verification_phase1-1.md # Phase 1-1 검증 문서
 ├── src/
 │   ├── core/
 │   │   ├── capture/            # 화면 캡처 모듈
-│   │   │   ├── frame_queue.h/cpp      ✅ (Phase 1-1 완료)
-│   │   │   ├── dxgi_capture.h/cpp     (Phase 1-2)
-│   │   │   └── frame_differ.h/cpp     (Phase 1-3)
+│   │   │   ├── frame_queue.h/cpp      ✅ (Phase 1-1 완료 - 8 tests)
+│   │   │   ├── dxgi_capture.h/cpp     ✅ (Phase 1-2 완료 - 8 tests, 141 FPS)
+│   │   │   ├── gdi_capture.h/cpp      ✅ (Phase 1-3 완료 - 9 tests, 44 FPS)
+│   │   │   └── capture_thread.h/cpp   ✅ (Phase 1-4 완료 - 3 tests, 32 FPS)
 │   │   ├── ocr/                # OCR 모듈
-│   │   │   └── tesseract_wrapper.h/cpp (Phase 2-1)
+│   │   │   ├── ocr_engine.h/cpp          ✅ (Phase 2-1 완료 - IOcrEngine 추상화)
+│   │   │   ├── tesseract_wrapper.h/cpp   ✅ (Phase 2-1 완료 - 10 tests, 89.5% 신뢰도)
+│   │   │   └── ocr_thread.h/cpp          ✅ (Phase 2-2 완료 - 8 tests)
 │   │   └── tokenizer/          # 토큰화 모듈
-│   │       ├── japanese_tokenizer.h/cpp (Phase 2-2)
-│   │       └── furigana_mapper.h/cpp    (Phase 2-3)
+│   │       ├── japanese_tokenizer.h/cpp  ✅ (Phase 3-1 완료 - 11 tests, MeCab 통합)
+│   │       └── furigana_mapper.h/cpp     (Phase 3-2 예정)
 │   ├── ui/
 │   │   ├── overlay/            # 오버레이 UI
-│   │   │   ├── overlay_window.h/cpp     (Phase 3-1)
-│   │   │   └── furigana_renderer.h/cpp  (Phase 3-2)
+│   │   │   ├── overlay_window.h/cpp     (Phase 4-1 예정)
+│   │   │   └── furigana_renderer.h/cpp  (Phase 4-2 예정)
 │   │   └── app/                # Qt 데스크톱 앱
-│   │       └── main_window.h/cpp        (Phase 5)
+│   │       └── main_window.h/cpp        (Phase 5 예정)
 │   ├── dict/                   # 사전 모듈
-│   │   └── dictionary.h/cpp    (Phase 4-1)
+│   │   └── dictionary.h/cpp    (Phase 6 예정)
 │   └── anki/                   # Anki 통합
-│       └── anki_connect_client.h/cpp (Phase 4-2)
+│       └── anki_connect_client.h/cpp (Phase 7 예정)
 └── tests/
-    ├── unit/                   # 단위 테스트
-    │   └── test_frame_queue.cpp         ✅ (Phase 1-1 완료)
+    ├── unit/                   # 단위 테스트 (57개 테스트)
+    │   ├── test_frame_queue.cpp         ✅ (8 tests)
+    │   ├── test_dxgi_capture.cpp        ✅ (8 tests)
+    │   ├── test_gdi_capture.cpp         ✅ (9 tests)
+    │   ├── test_capture_thread.cpp      ✅ (3 tests)
+    │   ├── test_tesseract_wrapper.cpp   ✅ (10 tests)
+    │   ├── test_ocr_thread.cpp          ✅ (8 tests)
+    │   └── test_japanese_tokenizer.cpp  ✅ (11 tests)
     └── integration/            # 통합 테스트
-        └── test_full_pipeline.cpp       (Phase 5)
+        └── test_full_pipeline.cpp       (Phase 8 예정)
 ```
 
 ---
@@ -163,17 +185,41 @@ ToriYomi/
 
 ### 현재 진행 상황
 
-- [x] ✅ **Phase 1-1**: FrameQueue 구현 (TDD 완료)
-  - 스레드 안전 프레임 큐
-  - 8개 단위 테스트 작성 및 통과
-- [ ] **Phase 1-2**: DXGI Capture 기본 구조
-- [ ] **Phase 1-3**: 프레임 변경 감지
-- [ ] **Phase 2**: OCR & Tokenization
-- [ ] **Phase 3**: Overlay UI
-- [ ] **Phase 4**: Dictionary & Anki
-- [ ] **Phase 5**: Qt UI & 통합 테스트
+**전체 진행률: 43% (6/14 phases 완료)**
 
-상세 로드맵: [docs/spec.md](docs/spec.md)
+#### ✅ Phase 1: 화면 캡처 (100% 완료)
+- [x] **Phase 1-1**: FrameQueue 구현
+  - 스레드 안전 프레임 큐, 8개 단위 테스트 통과
+- [x] **Phase 1-2**: DXGI Capture
+  - DirectX 11 Desktop Duplication API, 141 FPS, 8개 테스트 통과
+- [x] **Phase 1-3**: GDI Capture (Fallback)
+  - GDI BitBlt, 44 FPS, 9개 테스트 통과
+- [x] **Phase 1-4**: CaptureThread
+  - 백그라운드 캡처 스레드, 히스토그램 기반 변경 감지(0.95 임계값), 32 FPS, 3개 테스트 통과
+
+#### ✅ Phase 2: OCR (100% 완료)
+- [x] **Phase 2-1**: Tesseract 래퍼
+  - IOcrEngine 인터페이스, 팩토리 패턴, 10개 테스트 통과, 89.5% 신뢰도
+  - 확장 가능한 설계 (PaddleOCR, EasyOCR 추가 가능)
+- [x] **Phase 2-2**: OCR 스레드
+  - FrameQueue 소비, 비동기 텍스트 인식, 8개 테스트 통과
+
+#### ✅ Phase 3-1: 일본어 토큰화 (50% 완료)
+- [x] **Phase 3-1**: 일본어 토크나이저
+  - MeCab 형태소 분석기 통합, argc/argv 초기화, 11개 테스트 통과
+  - Token 구조: surface, reading(후리가나), baseForm, partOfSpeech, boundingBox, confidence
+  - 사전 자동 탐색 (시스템 설치 + 번들 배포 지원)
+  - 성능: ~100,000 tokens/sec
+- [ ] **Phase 3-2**: 후리가나 매퍼 (진행 예정)
+
+#### 🚧 Phase 4~8: 진행 예정
+- [ ] Phase 4: Overlay UI (후리가나 렌더링)
+- [ ] Phase 5: Qt 데스크톱 앱
+- [ ] Phase 6: 사전 통합
+- [ ] Phase 7: Anki 통합
+- [ ] Phase 8: 통합 테스트 & 최적화
+
+상세 로드맵: [TODO.md](TODO.md)
 
 ---
 
@@ -192,15 +238,18 @@ ToriYomi/
 
 ---
 
-## 📊 성능 목표
+## 📊 성능 목표 & 현재 성능
 
-| 항목 | 목표 |
-|------|------|
-| **레이턴시** (캡처→오버레이) | ≤ 200ms |
-| **오버레이 렌더링** | ≤ 16ms (60 FPS) |
-| **CPU 사용률** | ≤ 30% (평균) |
-| **메모리 사용량** | ≤ 300MB |
-| **OCR 스킵률** | ≥ 90% (변경 없는 프레임) |
+| 항목 | 목표 | 현재 성능 |
+|------|------|-----------|
+| **화면 캡처 (DXGI)** | ≥ 30 FPS | ✅ 141 FPS (베이스라인) |
+| **화면 캡처 (GDI)** | ≥ 30 FPS | ✅ 44 FPS (폴백) |
+| **캡처 + 변경 감지** | ≥ 30 FPS | ✅ 32 FPS (필터링 후) |
+| **일본어 토큰화** | ≥ 10,000 tokens/sec | ✅ ~100,000 tokens/sec |
+| **OCR 정확도** | ≥ 85% | ✅ 89.5% (영문 기준) |
+| **레이턴시** (캡처→오버레이) | ≤ 200ms | 🚧 측정 예정 |
+| **CPU 사용률** | ≤ 30% (평균) | 🚧 측정 예정 |
+| **메모리 사용량** | ≤ 300MB | 🚧 측정 예정 |
 
 ---
 
@@ -240,9 +289,11 @@ MIT License - 자세한 내용은 [LICENSE](LICENSE) 파일 참조
 ## 🙏 감사의 말
 
 - [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) - 오픈소스 OCR 엔진
+- [MeCab](https://github.com/taku910/mecab) - 일본어 형태소 분석기
 - [OpenCV](https://opencv.org/) - 컴퓨터 비전 라이브러리
 - [Qt](https://www.qt.io/) - 크로스 플랫폼 UI 프레임워크
-- [AnkiConnect](https://foosoft.net/projects/anki-connect/) - Anki 통합
+- [AnkiConnect](https://foosoft.net/projects/anki-connect/) - Anki 통합 (예정)
+- [vcpkg](https://vcpkg.io/) - C++ 패키지 매니저
 
 ---
 
