@@ -136,11 +136,11 @@ TEST_F(TesseractWrapperTest, MultipleInitialize) {
 // 테스트 8: TextSegment 구조체 확인
 TEST_F(TesseractWrapperTest, TextSegmentStructure) {
     TextSegment segment;
-    segment.text = "テスト";
+    segment.text = "Test";
     segment.boundingBox = cv::Rect(10, 20, 100, 50);
     segment.confidence = 95.5f;
     
-    EXPECT_EQ(segment.text, "テスト");
+    EXPECT_EQ(segment.text, "Test");
     EXPECT_EQ(segment.boundingBox.x, 10);
     EXPECT_EQ(segment.boundingBox.y, 20);
     EXPECT_EQ(segment.boundingBox.width, 100);

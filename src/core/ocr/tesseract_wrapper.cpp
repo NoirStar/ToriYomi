@@ -28,8 +28,8 @@ public:
         cv::Mat rgb;
         cv::cvtColor(image, rgb, cv::COLOR_BGR2RGB);
 
-        // Pix 생성 (24-bit RGB)
-        Pix* pix = pixCreate(rgb.cols, rgb.rows, 24);
+        // Pix 생성 (32-bit RGB with alpha)
+        Pix* pix = pixCreate(rgb.cols, rgb.rows, 32);
         if (!pix) {
             return nullptr;
         }
@@ -38,6 +38,7 @@ public:
         for (int y = 0; y < rgb.rows; ++y) {
             for (int x = 0; x < rgb.cols; ++x) {
                 const cv::Vec3b& pixel = rgb.at<cv::Vec3b>(y, x);
+                // 32bpp RGBA 포맷으로 설정 (alpha는 255)
                 pixSetRGBPixel(pix, x, y, pixel[0], pixel[1], pixel[2]);
             }
         }

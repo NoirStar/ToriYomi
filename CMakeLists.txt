@@ -21,6 +21,7 @@ find_package(Leptonica REQUIRED)
 include_directories(
 	${CMAKE_SOURCE_DIR}/src
 	${OpenCV_INCLUDE_DIRS}
+	C:/vcpkg/installed/x64-windows/include
 )
 
 # Core library - Capture module
@@ -49,8 +50,8 @@ add_library(toriyomi_ocr
 
 target_link_libraries(toriyomi_ocr
 	${OpenCV_LIBS}
-	${Tesseract_LIBRARIES}
-	${Leptonica_LIBRARIES}
+	C:/vcpkg/installed/x64-windows/lib/tesseract55.lib
+	C:/vcpkg/installed/x64-windows/lib/leptonica-1.85.0.lib
 )
 
 target_include_directories(toriyomi_ocr PUBLIC
