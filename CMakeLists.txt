@@ -17,6 +17,7 @@ find_package(GTest REQUIRED)
 find_package(Tesseract REQUIRED)
 find_package(Leptonica REQUIRED)
 find_package(mecab CONFIG REQUIRED)
+find_package(Qt6 REQUIRED COMPONENTS Widgets UiTools)
 
 # Include directories
 include_directories(
@@ -98,6 +99,54 @@ target_include_directories(toriyomi_overlay PUBLIC
 
 # UTF-8 인코딩 설정
 target_compile_options(toriyomi_overlay PRIVATE /utf-8)
+
+# UI library - Qt App module
+set(CMAKE_AUTOUIC ON)
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+
+add_library(toriyomi_app
+	src/ui/app/main_app.cpp
+	src/ui/app/roi_selector_dialog.cpp
+	src/ui/app/draggable_image_label.cpp
+	src/ui/app/interactive_sentence_widget.cpp
+	src/ui/app/app.ui
+)
+
+target_link_libraries(toriyomi_app
+	toriyomi_tokenizer
+	Qt6::Widgets
+	Qt6::UiTools
+	${OpenCV_LIBS}
+)
+
+target_include_directories(toriyomi_app PUBLIC
+	${CMAKE_SOURCE_DIR}/src
+)
+
+# UTF-8 인코딩 설정
+target_compile_options(toriyomi_app PRIVATE /utf-8 /Zc:__cplusplus)
+
+# Qt Desktop Application Executable
+add_executable(ToriYomiApp WIN32
+	src/ui/app/main.cpp
+)
+
+target_link_libraries(ToriYomiApp
+	toriyomi_app
+	toriyomi_tokenizer
+	Qt6::Widgets
+	Qt6::UiTools
+	${OpenCV_LIBS}
+)
+
+set_target_properties(ToriYomiApp PROPERTIES
+	RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+	WIN32_EXECUTABLE TRUE
+)
+
+# UTF-8 인코딩 및 C++ 표준 설정
+target_compile_options(ToriYomiApp PRIVATE /utf-8 /Zc:__cplusplus)
 
 # Enable testing
 enable_testing()

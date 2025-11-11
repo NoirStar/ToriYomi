@@ -29,13 +29,14 @@ Write-Host "`nConfiguring CMake..." -ForegroundColor Green
 Set-Location build
 
 $toolchainFile = Join-Path $VcpkgRoot "scripts\buildsystems\vcpkg.cmake"
+$qtPath = "C:\Qt\6.10.0\msvc2022_64"
 
 if (Test-Path $toolchainFile) {
-    cmake .. -DCMAKE_TOOLCHAIN_FILE=$toolchainFile
+    cmake .. "-DCMAKE_TOOLCHAIN_FILE=$toolchainFile" "-DCMAKE_PREFIX_PATH=$qtPath"
 } else {
     Write-Host "Warning: vcpkg toolchain not found at $toolchainFile" -ForegroundColor Yellow
     Write-Host "Trying to configure without vcpkg..." -ForegroundColor Yellow
-    cmake ..
+    cmake .. "-DCMAKE_PREFIX_PATH=$qtPath"
 }
 
 if ($LASTEXITCODE -ne 0) {
