@@ -80,6 +80,24 @@ target_include_directories(toriyomi_tokenizer PUBLIC
 # UTF-8 인코딩 설정 (일본어 문자열 지원)
 target_compile_options(toriyomi_tokenizer PRIVATE /utf-8)
 
+# UI library - Overlay module
+add_library(toriyomi_overlay
+	src/ui/overlay/overlay_window.cpp
+)
+
+target_link_libraries(toriyomi_overlay
+	toriyomi_tokenizer
+	${OpenCV_LIBS}
+	gdiplus
+)
+
+target_include_directories(toriyomi_overlay PUBLIC
+	${CMAKE_SOURCE_DIR}/src
+)
+
+# UTF-8 인코딩 설정
+target_compile_options(toriyomi_overlay PRIVATE /utf-8)
+
 # Enable testing
 enable_testing()
 
@@ -230,3 +248,25 @@ set_target_properties(test_furigana_mapper PROPERTIES
 target_compile_options(test_furigana_mapper PRIVATE /utf-8)
 
 add_test(NAME FuriganaMapperTest COMMAND test_furigana_mapper)
+
+# Overlay Window tests
+add_executable(test_overlay_window
+	tests/unit/test_overlay_window.cpp
+)
+
+target_link_libraries(test_overlay_window
+	toriyomi_overlay
+	toriyomi_tokenizer
+	GTest::gtest
+	GTest::gtest_main
+	${OpenCV_LIBS}
+)
+
+set_target_properties(test_overlay_window PROPERTIES
+	RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+)
+
+# UTF-8 인코딩 설정
+target_compile_options(test_overlay_window PRIVATE /utf-8)
+
+add_test(NAME OverlayWindowTest COMMAND test_overlay_window)

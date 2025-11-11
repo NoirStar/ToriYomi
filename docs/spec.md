@@ -232,25 +232,31 @@ src/
 ### 4. 오버레이 UI
 
 #### 4.1 오버레이 창 (`overlay_window`)
+- **목적**: 게임 화면(OCR 소스) 위에 **후리가나만** 표시하는 투명 윈도우
 - **속성**:
   - 최상위 윈도우 (`WS_EX_TOPMOST`)
-  - 투명 배경 (`SetLayeredWindowAttributes`)
-  - 클릭 투과 (`WS_EX_TRANSPARENT`)
+  - 완전 투명 배경 (`SetLayeredWindowAttributes`)
+  - 클릭 투과 (`WS_EX_TRANSPARENT`) - 게임 조작 방해하지 않음
 - **렌더링**:
-  - GDI/DirectWrite로 후리가나 텍스트 그리기
-  - 폰트: 일본어 지원 (예: "Yu Gothic", "Meiryo")
-  - 크기: 한자 폰트의 70% 크기
+  - **한자 위치에 후리가나만 표시** (원본 텍스트는 표시하지 않음)
+  - GDI+ 또는 Direct2D로 루비 텍스트 렌더링
+  - 폰트: 일본어 고딕체 (예: "Yu Gothic", "Meiryo")
+  - 크기: 작고 읽기 쉬운 크기 (8~12pt 권장)
+  - 스타일: 검은색 텍스트 + 흰색 외곽선 (가독성)
 
 #### 4.2 렌더링 루프
 - **주기**: 16ms (≈60 FPS)
-- **데이터 소스**: OcrThread가 업데이트한 `FuriganaSegment` 버퍼
-- **스레드 안전**: `std::atomic` 또는 `std::mutex`로 동기화
+- **데이터 소스**: `FuriganaMapper`에서 생성한 `FuriganaInfo` 리스트
+- **렌더링 조건**: `needsRuby == true`인 항목만 렌더링 (한자만)
+- **스레드 안전**: `std::mutex`로 후리가나 데이터 동기화
 
 ---
 
 ### 5. 데스크톱 앱 UI (Qt Widgets)
 
 #### 5.1 UI 구성
+- **목적**: 게임 화면과 **분리된 별도 윈도우**에서 학습 기능 제공
+- **역할**: 문장 관리, 단어 사전, Anki 연동 등
 - **Qt Designer (.ui 파일)** 사용 필수
 - C++ 코드는 `.ui` 로드만 담당:
   ```cpp
@@ -262,6 +268,7 @@ src/
 #### 5.2 문장 리스트 (`sentence_list_widget`)
 - **기능**:
   - OCR 추출 문장 목록 표시 (`QListWidget`)
+  - 후리가나 포함 표시 (원본 + 읽기)
   - 더블클릭 → 해당 문장 하이라이트
 - **저장**:
   - 세션 중 메모리 저장
