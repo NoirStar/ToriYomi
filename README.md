@@ -6,18 +6,31 @@
 [![C++20](https://img.shields.io/badge/C++-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
 [![CMake](https://img.shields.io/badge/CMake-3.20+-064F8C.svg)](https://cmake.org/)
 
-## 📖 소개
+## � 스크린샷
+
+## 📸 스크린샷
+
+<div align="center">
+  <img src="docs/images/ui-screenshot.png" alt="ToriYomi UI" width="800"/>
+  <p><i>QML 기반 모던 다크 테마 UI (개발 중)</i></p>
+</div>
+
+> **⚠️ 개발 상태**: 현재 UI만 부분적으로 완성되었습니다. 핵심 기능(OCR, 후리가나, 오버레이)은 개발 중입니다.
+
+---
+
+##  소개
 
 ToriYomi는 일본어 게임 플레이 중 **실시간으로 한자에 후리가나를 표시**하여 읽기를 돕는 학습 도구입니다. 게임 화면에 비간섭 오버레이로 후리가나를 띄우고, 추출된 문장을 데스크톱 앱에서 관리하며, 사전 검색과 Anki 카드 생성까지 지원합니다.
 
-### ✨ 주요 기능
+### ✨ 주요 기능 (계획)
 
-- 🎮 **게임 화면 실시간 캡처** (DXGI/GDI)
-- 📝 **일본어 OCR** (Tesseract)
-- 🔤 **한자에만 후리가나 표시** (게임 화면 오버레이)
-- 📚 **문장 저장 및 관리** (Qt 데스크톱 앱)
-- 🔍 **로컬 사전 검색**
-- 📤 **Anki 카드 자동 생성** (AnkiConnect)
+- 🎮 **게임 화면 실시간 캡처** (DXGI/GDI) - 🚧 개발 중
+- 📝 **일본어 OCR** (Tesseract) - 🚧 개발 중
+- 🔤 **한자에만 후리가나 표시** (게임 화면 오버레이) - 🚧 개발 중
+- 📚 **문장 저장 및 관리** (Qt QML 데스크톱 앱) - ✅ UI 부분 완성
+- 🔍 **로컬 사전 검색** - 📝 예정
+- 📤 **Anki 카드 자동 생성** (AnkiConnect) - 📝 예정
 
 ### 🎯 목표
 
