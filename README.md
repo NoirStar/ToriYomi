@@ -6,8 +6,6 @@
 [![C++20](https://img.shields.io/badge/C++-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
 [![CMake](https://img.shields.io/badge/CMake-3.20+-064F8C.svg)](https://cmake.org/)
 
-## � 스크린샷
-
 ## 📸 스크린샷
 
 <div align="center">
@@ -19,7 +17,7 @@
 
 ---
 
-##  소개
+## 📖 소개
 
 ToriYomi는 일본어 게임 플레이 중 **실시간으로 한자에 후리가나를 표시**하여 읽기를 돕는 학습 도구입니다. 게임 화면에 비간섭 오버레이로 후리가나를 띄우고, 추출된 문장을 데스크톱 앱에서 관리하며, 사전 검색과 Anki 카드 생성까지 지원합니다.
 
@@ -101,9 +99,8 @@ $env:TEMP="C:\Temp"; $env:TMP="C:\Temp"  # vcpkg 빌드 임시 경로 설정
 .\vcpkg install gtest:x64-windows
 .\vcpkg install tesseract:x64-windows
 .\vcpkg install leptonica:x64-windows
-.\vcpkg install mecab:x64-windows
 
-# MeCab 일본어 사전 설치 (별도)
+# MeCab 직접 설치 (vcpkg 사용 안 함)
 # https://github.com/ikegami-yukino/mecab/releases에서
 # mecab-0.996-64.exe 다운로드 및 설치
 # 설치 경로: C:\Program Files\MeCab
