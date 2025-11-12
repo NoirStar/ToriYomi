@@ -1,0 +1,15 @@
+<RCC>
+    <qresource>
+        <file>qtquickcontrols2.conf</file>
+        <file>ToriYomiApp.qmlproject</file>
+        <file>ToriYomiApp/Constants.qml</file>
+        <file>ToriYomiApp/EventListModel.qml</file>
+        <file>ToriYomiApp/EventListSimulator.qml</file>
+        <file>ToriYomiApp/qmldir</file>
+        <file>ToriYomiAppContent/App.qml</file>
+        <file>ToriYomiAppContent/DebugLogWindow.qml</file>
+        <file>ToriYomiAppContent/RegionSelector.qml</file>
+        <file>ToriYomiAppContent/Screen01.qml</file>
+        <file>ToriYomiAppContent/Screen01Form.ui.qml</file>
+    </qresource>
+</RCC>
