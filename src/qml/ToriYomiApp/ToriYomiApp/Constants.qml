@@ -1,6 +1,5 @@
 pragma Singleton
 import QtQuick
-import QtQuick.Studio.Application
 
 QtObject {
     readonly property int width: 1280
@@ -20,8 +19,6 @@ QtObject {
 
     readonly property color backgroundColor: "#2b2b2b"  // 다크 테마
 
-
-    property StudioApplication application: StudioApplication {
-        fontPath: Qt.resolvedUrl("../ToriYomiAppContent/" + relativeFontDirectory)
-    }
+    // StudioApplication은 Design Studio 전용이므로 표준 Qt에서는 제거
+    // 폰트는 Qt.application.font를 통해 자동으로 로드됨
 }

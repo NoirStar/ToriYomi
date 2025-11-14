@@ -146,7 +146,6 @@ LRESULT OverlayWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
 
         case WM_DESTROY:
-            PostQuitMessage(0);
             return 0;
 
         default:

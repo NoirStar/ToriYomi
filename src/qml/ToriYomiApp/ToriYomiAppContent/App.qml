@@ -10,10 +10,22 @@ Window {
     color: "transparent"
     flags: Qt.Window | Qt.FramelessWindowHint
     
+    onClosing: function(close) {
+        console.log("[App] Window close requested. accepted=" + close.accepted + ", spontaneous=" + close.spontaneous)
+        close.accepted = false
+        appBackend.requestShutdown()
+    }
+    
     // 일본어 폰트 로드
     FontLoader {
         id: japaneseFont
-        source: "ipaexg.ttf"
+        source: "fonts/ipaexg.ttf"
+    }
+    
+    // 한글 폰트 로드
+    FontLoader {
+        id: koreanFont
+        source: "fonts/Maplestory OTF Bold.otf"
     }
     
     Rectangle {
@@ -159,7 +171,7 @@ Window {
                         id: closeButtonArea
                         anchors.fill: parent
                         hoverEnabled: true
-                        onClicked: Qt.quit()
+                        onClicked: appWindow.close()
                     }
                 }
             }

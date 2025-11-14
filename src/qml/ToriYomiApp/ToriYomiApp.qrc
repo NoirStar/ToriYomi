@@ -11,5 +11,8 @@
         <file>ToriYomiAppContent/RegionSelector.qml</file>
         <file>ToriYomiAppContent/Screen01.qml</file>
         <file>ToriYomiAppContent/Screen01Form.ui.qml</file>
+        <file>ToriYomiAppContent/fonts/ipaexg.ttf</file>
+        <file>ToriYomiAppContent/fonts/Maplestory OTF Bold.otf</file>
+        <file>ToriYomiAppContent/fonts/Maplestory OTF Light.otf</file>
     </qresource>
 </RCC>

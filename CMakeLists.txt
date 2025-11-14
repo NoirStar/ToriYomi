@@ -6,6 +6,13 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# CRITICAL: Force MSVC runtime library to /MD (Release) and /MDd (Debug)
+# This MUST match vcpkg x64-windows triplet (dynamic CRT)
+if(MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+    message(STATUS "MSVC Runtime Library: MultiThreaded$<$<CONFIG:Debug>:Debug>DLL (/MD or /MDd)")
+endif()
+
 # Output directories
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -17,7 +24,7 @@ find_package(GTest REQUIRED)
 find_package(Tesseract REQUIRED)
 find_package(Leptonica REQUIRED)
 find_package(mecab CONFIG REQUIRED)
-find_package(Qt6 REQUIRED COMPONENTS Widgets UiTools)
+find_package(Qt6 REQUIRED COMPONENTS Quick Qml Widgets UiTools)
 
 # Include directories
 include_directories(
@@ -54,8 +61,10 @@ add_library(toriyomi_ocr
 target_link_libraries(toriyomi_ocr
 	toriyomi_capture
 	${OpenCV_LIBS}
-	C:/vcpkg/installed/x64-windows/lib/tesseract55.lib
-	C:/vcpkg/installed/x64-windows/lib/leptonica-1.85.0.lib
+	debug C:/vcpkg/installed/x64-windows/debug/lib/tesseract55d.lib
+	optimized C:/vcpkg/installed/x64-windows/lib/tesseract55.lib
+	debug C:/vcpkg/installed/x64-windows/debug/lib/leptonica-1.85.0d.lib
+	optimized C:/vcpkg/installed/x64-windows/lib/leptonica-1.85.0.lib
 )
 
 target_include_directories(toriyomi_ocr PUBLIC
@@ -100,53 +109,55 @@ target_include_directories(toriyomi_overlay PUBLIC
 # UTF-8 인코딩 설정
 target_compile_options(toriyomi_overlay PRIVATE /utf-8)
 
-# UI library - Qt App module
-set(CMAKE_AUTOUIC ON)
+# UI library - QML Backend module
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-add_library(toriyomi_app
-	src/ui/app/main_app.cpp
-	src/ui/app/roi_selector_dialog.cpp
-	src/ui/app/draggable_image_label.cpp
-	src/ui/app/interactive_sentence_widget.cpp
-	src/ui/app/app.ui
+# Qt6 Qml과 Quick 모듈 찾기
+find_package(Qt6 REQUIRED COMPONENTS Quick Qml)
+
+add_library(toriyomi_qml_backend
+	src/ui/qml_backend/app_backend.cpp
+	src/ui/qml_backend/app_backend.h
 )
 
-target_link_libraries(toriyomi_app
+target_link_libraries(toriyomi_qml_backend
 	toriyomi_capture
 	toriyomi_ocr
 	toriyomi_tokenizer
-	Qt6::Widgets
-	Qt6::UiTools
+	toriyomi_overlay
+	Qt6::Quick
+	Qt6::Qml
 	${OpenCV_LIBS}
 )
 
-target_include_directories(toriyomi_app PUBLIC
+target_include_directories(toriyomi_qml_backend PUBLIC
 	${CMAKE_SOURCE_DIR}/src
 )
 
 # UTF-8 인코딩 설정
-target_compile_options(toriyomi_app PRIVATE /utf-8 /Zc:__cplusplus)
+target_compile_options(toriyomi_qml_backend PRIVATE /utf-8 /Zc:__cplusplus)
 
-# Qt Desktop Application Executable
-add_executable(ToriYomiApp WIN32
-	src/ui/app/main.cpp
+# Qt Desktop Application Executable (QML)
+qt_add_executable(ToriYomiApp
+	src/ui/qml_app/main.cpp
+	src/qml/ToriYomiApp/ToriYomiApp.qrc
 )
 
-target_link_libraries(ToriYomiApp
-	toriyomi_app
+target_link_libraries(ToriYomiApp PRIVATE
+	toriyomi_qml_backend
 	toriyomi_capture
 	toriyomi_ocr
 	toriyomi_tokenizer
-	Qt6::Widgets
-	Qt6::UiTools
+	toriyomi_overlay
+	Qt6::Quick
+	Qt6::Qml
 	${OpenCV_LIBS}
 )
 
 set_target_properties(ToriYomiApp PROPERTIES
 	RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-	WIN32_EXECUTABLE TRUE
+	WIN32_EXECUTABLE FALSE
 )
 
 # UTF-8 인코딩 및 C++ 표준 설정
@@ -371,3 +382,35 @@ set_target_properties(test_overlay_thread PROPERTIES
 target_compile_options(test_overlay_thread PRIVATE /utf-8)
 
 add_test(NAME OverlayThreadTest COMMAND test_overlay_thread)
+
+# ============================================================================
+# DLL 자동 복사 규칙 (Debug/Release 분리)
+# ============================================================================
+
+# vcpkg DLL 경로 설정
+set(VCPKG_BIN_DEBUG "C:/vcpkg/installed/x64-windows/debug/bin")
+set(VCPKG_BIN_RELEASE "C:/vcpkg/installed/x64-windows/bin")
+
+# Debug 빌드: Debug DLL만 복사
+add_custom_command(TARGET ToriYomiApp POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E echo "Copying Debug DLLs..."
+    # Tesseract Debug
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${VCPKG_BIN_DEBUG}/tesseract55d.dll"
+        "$<TARGET_FILE_DIR:ToriYomiApp>"
+    # Leptonica Debug
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${VCPKG_BIN_DEBUG}/leptonica-1.85.0d.dll"
+        "$<TARGET_FILE_DIR:ToriYomiApp>"
+    # Release DLL 제거 (혼재 방지)
+    COMMAND ${CMAKE_COMMAND} -E remove -f
+        "$<TARGET_FILE_DIR:ToriYomiApp>/tesseract55.dll"
+    COMMAND ${CMAKE_COMMAND} -E remove -f
+        "$<TARGET_FILE_DIR:ToriYomiApp>/leptonica-1.85.0.dll"
+    COMMAND ${CMAKE_COMMAND} -E remove -f
+        "$<TARGET_FILE_DIR:ToriYomiApp>/opencv_core4.dll"
+    COMMAND ${CMAKE_COMMAND} -E remove -f
+        "$<TARGET_FILE_DIR:ToriYomiApp>/opencv_imgproc4.dll"
+    COMMENT "Ensuring Debug-only DLLs in output directory"
+    VERBATIM
+)

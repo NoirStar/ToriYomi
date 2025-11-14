@@ -34,10 +34,10 @@ public:
      * @brief OcrThread 생성
      * 
      * @param frameQueue 프레임을 받아올 큐 (CaptureThread와 공유)
-     * @param ocrEngine OCR 엔진 (Tesseract, PaddleOCR 등)
+     * @param ocrEngine OCR 엔진 (Tesseract 등) - shared_ptr로 생명주기 공유
      */
     OcrThread(std::shared_ptr<FrameQueue> frameQueue,
-              std::unique_ptr<IOcrEngine> ocrEngine);
+              std::shared_ptr<IOcrEngine> ocrEngine);
 
     /**
      * @brief OcrThread 소멸
@@ -105,7 +105,7 @@ private:
 
 private:
     std::shared_ptr<FrameQueue> frameQueue_;      // 프레임 큐 (공유)
-    std::unique_ptr<IOcrEngine> ocrEngine_;       // OCR 엔진
+    std::shared_ptr<IOcrEngine> ocrEngine_;       // OCR 엔진 (공유 - 스레드 실행 중 삭제 방지)
 
     std::thread ocrThread_;                       // 백그라운드 스레드
     std::atomic<bool> running_{false};            // 스레드 실행 상태

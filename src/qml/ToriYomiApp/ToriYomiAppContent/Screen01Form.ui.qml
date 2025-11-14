@@ -9,7 +9,6 @@ Check out https://doc.qt.io/qtcreator/creator-quick-ui-forms.html for details on
 import QtQuick
 import QtQuick.Controls
 import ToriYomiApp
-import QtQuick.Studio.DesignEffects
 
 Rectangle {
     id: screen01Form
@@ -64,6 +63,10 @@ Rectangle {
     // RegionSelector alias
     property alias regionSelector: regionSelector
     property alias debugLogWindow: debugLogWindow
+    
+    // 컨트롤 alias (Screen01.qml에서 접근)
+    property alias comboBox: comboBox
+    property alias startButton: startButton
 
     // Flow 대신 Column 사용하여 레이아웃 개선
     Column {

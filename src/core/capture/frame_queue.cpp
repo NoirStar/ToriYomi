@@ -40,8 +40,9 @@ std::optional<cv::Mat> FrameQueue::Pop(int timeoutMs) {
 		return std::nullopt;
 	}
 	
-	// Get the frame
-	cv::Mat frame = queue_.front();
+	// CRITICAL: clone() BEFORE pop() to avoid dangling reference
+	// queue_.front() returns a reference that becomes invalid after pop()
+	cv::Mat frame = queue_.front().clone();
 	queue_.pop();
 	
 	return frame;

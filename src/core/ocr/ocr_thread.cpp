@@ -8,9 +8,9 @@ namespace toriyomi {
 namespace ocr {
 
 OcrThread::OcrThread(std::shared_ptr<FrameQueue> frameQueue,
-                     std::unique_ptr<IOcrEngine> ocrEngine)
+                     std::shared_ptr<IOcrEngine> ocrEngine)
     : frameQueue_(frameQueue)
-    , ocrEngine_(std::move(ocrEngine))
+    , ocrEngine_(ocrEngine)  // shared_ptr 복사 (참조 카운트 증가)
     , lastFpsUpdate_(std::chrono::steady_clock::now()) {
     
     if (ocrEngine_) {
@@ -44,11 +44,9 @@ void OcrThread::Stop() {
     if (!running_) {
         return;
     }
-
-    // 스레드 종료 요청
+    
     running_ = false;
-
-    // 스레드 종료 대기
+    
     if (ocrThread_.joinable()) {
         ocrThread_.join();
     }
@@ -70,26 +68,28 @@ OcrStatistics OcrThread::GetStatistics() const {
 
 void OcrThread::OcrLoop() {
     while (running_) {
-        // FrameQueue에서 프레임 꺼내기 (100ms 타임아웃)
         auto frameOpt = frameQueue_->Pop(100);
         
         if (!frameOpt.has_value()) {
-            // 타임아웃 - 다시 시도
             continue;
         }
 
+        if (!running_) {
+            break;
+        }
+
         cv::Mat frame = frameOpt.value();
-
-        // OCR 수행
         auto results = ocrEngine_->RecognizeText(frame);
-
-        // 결과 저장 (스레드 안전)
+        
+        if (!running_) {
+            break;
+        }
+        
         {
             std::lock_guard<std::mutex> lock(resultsMutex_);
             latestResults_ = results;
         }
 
-        // 통계 업데이트
         {
             std::lock_guard<std::mutex> lock(statsMutex_);
             stats_.totalFramesProcessed++;
@@ -97,7 +97,6 @@ void OcrThread::OcrLoop() {
             framesProcessedSinceLastUpdate_++;
         }
 
-        // FPS 업데이트 (1초마다)
         UpdateFps();
     }
 }
