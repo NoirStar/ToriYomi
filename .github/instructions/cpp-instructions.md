@@ -1,4 +1,9 @@
-﻿# C++ Code Generation Instructions for ToriYomi
+---
+description: 'Guidelines for building C# applications'
+applyTo: '**/*.cpp, **/*.h, **/*.hpp'
+---
+ 
+# C++ Code Generation Instructions for ToriYomi
 
 ## Project Context
 
