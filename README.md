@@ -21,12 +21,18 @@
 
 ToriYomi는 일본어 게임 플레이 중 **실시간으로 한자에 후리가나를 표시**하여 읽기를 돕는 학습 도구입니다. 게임 화면에 비간섭 오버레이로 후리가나를 띄우고, 추출된 문장을 데스크톱 앱에서 관리하며, 사전 검색과 Anki 카드 생성까지 지원합니다.
 
+## 🆕 최근 업데이트 (2025-11-15)
+
+- **PaddleOCR 기본화**: FastDeploy 기반 PaddleOCR 파이프라인을 기본 엔진으로 전환하고, 런타임 검출 실패 시 자동으로 Tesseract로 폴백합니다.
+- **런타임 DLL 자동 배포**: `TORIYOMI_FASTDEPLOY_RUNTIME_DIR`와 `MECAB_DLL_PATH` 옵션을 추가하여 FastDeploy/MeCab DLL을 모든 실행 파일과 테스트 옆으로 자동 복사합니다.
+- **전체 테스트 스위트 통과**: `ctest -C Debug --output-on-failure` 기준 10개 모듈 테스트 모두 통과했습니다. `test_japanese_tokenizer`도 MeCab DLL 복사 이후 안정화되었습니다.
+
 ### ✨ 주요 기능 (계획)
 
-- 🎮 **게임 화면 실시간 캡처** (DXGI/GDI) - 🚧 개발 중
-- 📝 **일본어 OCR** (Tesseract) - 🚧 개발 중
-- 🔤 **한자에만 후리가나 표시** (게임 화면 오버레이) - 🚧 개발 중
-- 📚 **문장 저장 및 관리** (Qt QML 데스크톱 앱) - ✅ UI 부분 완성
+- 🎮 **게임 화면 실시간 캡처** (DXGI/GDI) - ✅ Phase 1 완료 (DXGI 141 FPS / GDI 44 FPS)
+- 📝 **일본어 OCR** (기본: PaddleOCR + FastDeploy, 폴백: Tesseract) - ✅ 엔진 부트스트랩 + 자동 폴백 구현
+- 🔤 **한자에만 후리가나 표시** (게임 화면 오버레이) - 🚧 렌더러 안정화 진행 중
+- 📚 **문장 저장 및 관리** (Qt QML 데스크톱 앱) - ✅ 기본 UI + 캡처/OCR 파이프라인 연동 중
 - 🔍 **로컬 사전 검색** - 📝 예정
 - 📤 **Anki 카드 자동 생성** (AnkiConnect) - 📝 예정
 
@@ -46,7 +52,7 @@ ToriYomi는 일본어 게임 플레이 중 **실시간으로 한자에 후리가
                         FrameQueue (스레드 안전)
                              │
                              v
-                         OcrThread (Tesseract)
+                        OcrThread (Paddle 기본 / Tesseract 폴백)
                              │
                              v
                          Tokenizer (한자→후리가나)
@@ -77,7 +83,9 @@ ToriYomi는 일본어 게임 플레이 중 **실시간으로 한자에 후리가
 - **CMake**: 3.20 이상
 - **의존성**:
   - OpenCV 4.11+
-  - Tesseract 5.5+
+  - FastDeploy 2.3+ (PaddleOCR 기본 엔진)
+  - PaddleOCR 모델 (PP-OCRv4/v5, det/cls/rec + label)
+  - Tesseract 5.5+ (폴백)
   - MeCab 0.996+ (일본어 형태소 분석)
   - Google Test 1.17+
   - Qt 6.5+ (Phase 5에서 사용 예정)
@@ -106,7 +114,34 @@ $env:TEMP="C:\Temp"; $env:TMP="C:\Temp"  # vcpkg 빌드 임시 경로 설정
 # 설치 경로: C:\Program Files\MeCab
 ```
 
-#### 2. 프로젝트 빌드
+#### 2. FastDeploy + PaddleOCR 모델 준비
+
+FastDeploy는 기본적으로 PaddleOCR을 구동하기 위한 C++ 런타임을 제공합니다.
+
+1. [FastDeploy Release](https://github.com/PaddlePaddle/FastDeploy/releases)에서 **Windows CPU x64** 압축 파일을 다운로드합니다.
+2. 원하는 경로에 압축을 풉니다 (예: `C:\dev\fastdeploy`)
+3. FastDeploy의 `lib/cmake/FastDeploy` 경로를 `CMAKE_PREFIX_PATH` 또는 `FastDeploy_DIR`에 포함시키면 CMake가 자동으로 감지합니다.
+4. 런타임 DLL(`fastdeploy.dll`, `glog.dll`, `onnxruntime.dll` 등)이 들어있는 `fastdeploy/lib` 또는 `fastdeploy/third_libs/install/fastdeploy/lib` 경로를 `TORIYOMI_FASTDEPLOY_RUNTIME_DIR` 옵션으로 지정하면 빌드 산출물 옆으로 자동 복사됩니다.
+
+모델은 FastDeploy에서 제공하는 PP-OCR 시리즈를 사용합니다.
+
+```powershell
+# 예: CPU용 PP-OCRv4 일본어 세트 다운로드 (디렉터리 구조 유지)
+Invoke-WebRequest -Uri "https://bj.bcebos.com/paddlehub/fastdeploy/PP-OCRv4/en.zip" -OutFile paddleocr.zip
+Expand-Archive paddleocr.zip -DestinationPath models
+Rename-Item models/en models/paddleocr
+
+# 필요한 파일 구조
+# models/paddleocr/
+#   det/
+#   cls/
+#   rec/
+#   ppocr_keys_v1.txt
+```
+
+앱은 실행 파일 기준 `models/paddleocr` 경로를 기본으로 사용합니다. 다른 경로를 쓰고 싶다면 UI 설정에서 모델 경로를 변경하거나 `OcrBootstrapConfig`를 커스터마이즈 하세요.
+
+#### 3. 프로젝트 빌드
 
 ```powershell
 git clone https://github.com/NoirStar/ToriYomi.git
@@ -122,7 +157,9 @@ cmake .. -DCMAKE_TOOLCHAIN_FILE=[vcpkg 경로]/scripts/buildsystems/vcpkg.cmake
 cmake --build . --config Release
 ```
 
-#### 3. 테스트 실행
+빌드시 PaddleOCR를 끄고 싶다면 `-DTORIYOMI_ENABLE_PADDLEOCR=OFF`를 전달하세요. FastDeploy가 설치되어 있지 않으면 자동으로 Tesseract 전용 모드로 전환됩니다.
+
+#### 4. 테스트 실행
 
 ```powershell
 cd build
@@ -195,7 +232,7 @@ ToriYomi/
 
 ### 현재 진행 상황
 
-**전체 진행률: 65% (8/14 phases 완료, 1 진행 중)**
+**전체 진행률: 70% (8/14 phases 완료, Phase 5 거의 완료)**
 
 #### ✅ Phase 1: 화면 캡처 (100% 완료)
 - [x] **Phase 1-1**: FrameQueue 구현
@@ -208,9 +245,12 @@ ToriYomi/
   - 백그라운드 캡처 스레드, 히스토그램 기반 변경 감지(0.95 임계값), 32 FPS, 3개 테스트 통과
 
 #### ✅ Phase 2: OCR (100% 완료)
-- [x] **Phase 2-1**: Tesseract 래퍼
-  - IOcrEngine 인터페이스, 팩토리 패턴, 10개 테스트 통과, 89.5% 신뢰도
-  - 확장 가능한 설계 (PaddleOCR, EasyOCR 추가 가능)
+- [x] **Phase 2-1**: OCR 엔진 추상화
+  - IOcrEngine 인터페이스 설계
+  - PaddleOcrWrapper 구현 (FastDeploy + PP-OCRv4, 기본 엔진)
+  - TesseractWrapper 구현 (폴백 엔진, 10개 테스트 통과, 89.5% 신뢰도)
+  - OcrEngineBootstrapper (Paddle → Tesseract 자동 폴백)
+  - 팩토리 패턴으로 확장 가능한 설계
 - [x] **Phase 2-2**: OCR 스레드
   - FrameQueue 소비, 비동기 텍스트 인식, 8개 테스트 통과
 
@@ -220,6 +260,7 @@ ToriYomi/
   - Token 구조: surface, reading(후리가나), baseForm, partOfSpeech, boundingBox, confidence
   - 사전 자동 탐색 (시스템 설치 + 번들 배포 지원)
   - 성능: ~100,000 tokens/sec
+  - CMake DLL 자동 복사 (`MECAB_DLL_PATH` 옵션)
 - [ ] **Phase 3-2**: 후리가나 매퍼 (진행 예정)
 
 #### ✅ Phase 4: Overlay UI (100% 완료)
@@ -230,7 +271,7 @@ ToriYomi/
   - 비동기 렌더링, 후리가나 표시
   - 11개 테스트 통과
 
-#### 🚧 Phase 5: Qt 데스크톱 앱 (70% 완료)
+#### ✅ Phase 5: Qt 데스크톱 앱 (95% 완료)
 - [x] **Phase 5-1**: 기본 UI 구현
   - Qt 6.10.0 MSVC 2022 설정
   - AUTOUIC 빌드타임 컴파일
@@ -238,12 +279,14 @@ ToriYomi/
   - ROI 선택 (DraggableImageLabel, 800x550 최대)
   - InteractiveSentenceWidget (단어별 클릭)
   - PrintWindow API 화면 캡처
-- [x] **Phase 5-2**: 파이프라인 통합 (진행 중)
+- [x] **Phase 5-2**: 파이프라인 통합 (완료!)
   - Start/Stop 버튼 (비동기 초기화)
   - 디버그 로그 패널 (타임스탬프, 실시간)
   - QTimer 폴링 방식 (100ms)
   - 캡처 → OCR → 토큰화 파이프라인
-  - **Known Issue**: Tesseract 초기화 실패 (경로 문제)
+  - PaddleOCR 기본 엔진 + Tesseract 자동 폴백
+  - FastDeploy/MeCab DLL 자동 배포 시스템
+  - **전체 테스트 통과** (10개 모듈, ctest -C Debug)
 - [ ] **Phase 5-3**: 사전 & Anki 통합 (진행 예정)
 
 #### 🚧 Phase 6~8: 진행 예정

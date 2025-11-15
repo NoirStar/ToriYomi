@@ -81,6 +81,16 @@ public:
     std::vector<TextSegment> GetLatestResults() const;
 
     /**
+     * @brief OCR 입력 이미지에서 사용할 자르기 영역 설정
+     */
+    void SetCropRegion(const cv::Rect& rect);
+
+    /**
+     * @brief 자르기 영역 해제
+     */
+    void ClearCropRegion();
+
+    /**
      * @brief OCR 통계 정보 가져오기
      * 
      * @return OCR 처리 통계
@@ -121,6 +131,11 @@ private:
     // FPS 계산용
     std::chrono::steady_clock::time_point lastFpsUpdate_;
     uint64_t framesProcessedSinceLastUpdate_ = 0;
+
+    // ROI 잘라내기 정보
+    mutable std::mutex cropMutex_;
+    cv::Rect cropRegion_;
+    bool cropEnabled_ = false;
 };
 
 }  // namespace ocr

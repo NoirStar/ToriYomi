@@ -61,6 +61,17 @@ std::vector<TextSegment> OcrThread::GetLatestResults() const {
     return latestResults_;
 }
 
+void OcrThread::SetCropRegion(const cv::Rect& rect) {
+    std::lock_guard<std::mutex> lock(cropMutex_);
+    cropRegion_ = rect;
+    cropEnabled_ = rect.width > 0 && rect.height > 0;
+}
+
+void OcrThread::ClearCropRegion() {
+    std::lock_guard<std::mutex> lock(cropMutex_);
+    cropEnabled_ = false;
+}
+
 OcrStatistics OcrThread::GetStatistics() const {
     std::lock_guard<std::mutex> lock(statsMutex_);
     return stats_;
@@ -79,6 +90,24 @@ void OcrThread::OcrLoop() {
         }
 
         cv::Mat frame = frameOpt.value();
+
+        cv::Rect crop;
+        bool applyCrop = false;
+        {
+            std::lock_guard<std::mutex> lock(cropMutex_);
+            if (cropEnabled_) {
+                crop = cropRegion_;
+                applyCrop = true;
+            }
+        }
+
+        if (applyCrop) {
+            cv::Rect frameRect(0, 0, frame.cols, frame.rows);
+            cv::Rect safeRect = crop & frameRect;
+            if (safeRect.width > 0 && safeRect.height > 0) {
+                frame = frame(safeRect).clone();
+            }
+        }
         auto results = ocrEngine_->RecognizeText(frame);
         
         if (!running_) {

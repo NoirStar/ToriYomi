@@ -7,6 +7,7 @@
 #include <thread>
 #include <chrono>
 #include <atomic>
+#include <algorithm>
 
 namespace toriyomi::capture {
 
@@ -17,6 +18,7 @@ struct CaptureThread::Impl {
     std::atomic<bool> running{false};
     std::atomic<bool> stopRequested{false};
     std::atomic<bool> changeDetectionEnabled{false};
+    std::atomic<int> captureIntervalMs{1000};
 
     // 캡처 인터페이스 (DXGI 또는 GDI)
     std::unique_ptr<DxgiCapture> dxgiCapture;
@@ -40,6 +42,7 @@ struct CaptureThread::Impl {
     bool CaptureFrame(cv::Mat& outFrame);
     bool HasFrameChanged(const cv::Mat& frame);
     void UpdateFps();
+    cv::Mat CropToClientArea(const cv::Mat& frame) const;
 
     // FPS 계산용
     std::chrono::steady_clock::time_point fpsStartTime;
@@ -128,6 +131,11 @@ void CaptureThread::SetChangeDetection(bool enable) {
     }
 }
 
+void CaptureThread::SetCaptureIntervalMilliseconds(int intervalMs) {
+    const int clamped = std::max(1, intervalMs);
+    pImpl_->captureIntervalMs = clamped;
+}
+
 CaptureStatistics CaptureThread::GetStatistics() const {
     CaptureStatistics stats;
     stats.totalFramesCaptured = pImpl_->totalFramesCaptured;
@@ -165,21 +173,72 @@ void CaptureThread::Impl::CaptureLoop() {
 
         // FPS 업데이트 (1초마다)
         UpdateFps();
-
-        // CPU 부하 줄이기 (약 60 FPS로 제한)
-        std::this_thread::sleep_for(std::chrono::milliseconds(16));
+        const int intervalMs = std::max(1, captureIntervalMs.load());
+        std::this_thread::sleep_for(std::chrono::milliseconds(intervalMs));
     }
 }
 
 bool CaptureThread::Impl::CaptureFrame(cv::Mat& outFrame) {
     if (usingDxgi && dxgiCapture) {
-        outFrame = dxgiCapture->CaptureFrame();
+        cv::Mat dxgiFrame = dxgiCapture->CaptureFrame();
+        if (dxgiFrame.empty()) {
+            return false;
+        }
+
+        cv::Mat clientFrame = CropToClientArea(dxgiFrame);
+        if (!clientFrame.empty()) {
+            outFrame = std::move(clientFrame);
+        } else {
+            outFrame = std::move(dxgiFrame);
+        }
         return !outFrame.empty();
     } else if (gdiCapture) {
         outFrame = gdiCapture->CaptureFrame();
         return !outFrame.empty();
     }
     return false;
+}
+
+cv::Mat CaptureThread::Impl::CropToClientArea(const cv::Mat& frame) const {
+    if (!targetWindow || !IsWindow(targetWindow)) {
+        return cv::Mat();
+    }
+
+    RECT clientRect{};
+    if (!GetClientRect(targetWindow, &clientRect)) {
+        return cv::Mat();
+    }
+
+    POINT clientTopLeft{0, 0};
+    if (!ClientToScreen(targetWindow, &clientTopLeft)) {
+        return cv::Mat();
+    }
+
+    const int width = std::max(1L, clientRect.right - clientRect.left);
+    const int height = std::max(1L, clientRect.bottom - clientRect.top);
+    LONG monitorLeft = 0;
+    LONG monitorTop = 0;
+    HMONITOR monitor = MonitorFromWindow(targetWindow, MONITOR_DEFAULTTONEAREST);
+    if (monitor) {
+        MONITORINFO monitorInfo{};
+        monitorInfo.cbSize = sizeof(MONITORINFO);
+        if (GetMonitorInfo(monitor, &monitorInfo)) {
+            monitorLeft = monitorInfo.rcMonitor.left;
+            monitorTop = monitorInfo.rcMonitor.top;
+        }
+    }
+
+    const int relativeX = clientTopLeft.x - static_cast<int>(monitorLeft);
+    const int relativeY = clientTopLeft.y - static_cast<int>(monitorTop);
+    cv::Rect desired(relativeX, relativeY, width, height);
+    cv::Rect frameRect(0, 0, frame.cols, frame.rows);
+    cv::Rect safe = desired & frameRect;
+
+    if (safe.width <= 0 || safe.height <= 0) {
+        return cv::Mat();
+    }
+
+    return frame(safe).clone();
 }
 
 bool CaptureThread::Impl::HasFrameChanged(const cv::Mat& frame) {

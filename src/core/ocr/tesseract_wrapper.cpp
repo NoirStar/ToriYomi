@@ -49,7 +49,6 @@ bool TesseractWrapper::Initialize(const std::string& tessdataPath, const std::st
     
     // DPI 명시 지정 (내부 Leptonica 호출 회피)
     pImpl_->api.SetVariable("user_defined_dpi", "300");
-    pImpl_->api.SetVariable("classify_bln_numeric_mode", "1");
 
     pImpl_->initialized = true;
     return true;
@@ -95,9 +94,22 @@ std::vector<TextSegment> TesseractWrapper::RecognizeText(const cv::Mat& image) {
     cv::setNumThreads(1);
 
     try {
-        // BGR을 RGB로 변환 (Tesseract는 RGB를 기대)
+        cv::Mat gray;
+        cv::cvtColor(working, gray, cv::COLOR_BGR2GRAY);
+
+        cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(3.0, cv::Size(8, 8));
+        cv::Mat equalized;
+        clahe->apply(gray, equalized);
+
+        cv::Mat denoised;
+        cv::bilateralFilter(equalized, denoised, 5, 40, 10);
+
+        cv::Mat sharpened;
+        cv::GaussianBlur(denoised, sharpened, cv::Size(0, 0), 1.2);
+        cv::addWeighted(denoised, 1.5, sharpened, -0.5, 0, sharpened);
+
         cv::Mat rgb;
-        cv::cvtColor(working, rgb, cv::COLOR_BGR2RGB);
+        cv::cvtColor(sharpened, rgb, cv::COLOR_GRAY2RGB);
         
         // 연속 메모리 보장
         if (!rgb.isContinuous()) {
@@ -106,11 +118,11 @@ std::vector<TextSegment> TesseractWrapper::RecognizeText(const cv::Mat& image) {
 
         // Tesseract에 Mat 버퍼 직접 전달 (Leptonica Pix 경유 X)
         pImpl_->api.SetImage(
-            rgb.data,                              // 이미지 데이터
-            rgb.cols,                              // 너비
-            rgb.rows,                              // 높이
-            3,                                     // bytes_per_pixel (RGB)
-            static_cast<int>(rgb.step[0])         // bytes_per_line
+            rgb.data,
+            rgb.cols,
+            rgb.rows,
+            3,
+            static_cast<int>(rgb.step[0])
         );
 
         // OCR 수행

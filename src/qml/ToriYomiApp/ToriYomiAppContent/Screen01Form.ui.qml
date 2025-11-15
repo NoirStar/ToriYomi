@@ -8,6 +8,8 @@ Check out https://doc.qt.io/qtcreator/creator-quick-ui-forms.html for details on
 */
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
+import QtQml.Models
 import ToriYomiApp
 
 Rectangle {
@@ -56,17 +58,24 @@ Rectangle {
     // 영역 선택 창 표시 여부
     property bool showRegionSelector: false
     property bool showDebugLog: false
-    
+
     // 일본어 텍스트 크기 조절
     property real japaneseFontSize: 24
-    
+    readonly property bool hasProcessSelection: comboBox.currentIndex >= 0
+
     // RegionSelector alias
     property alias regionSelector: regionSelector
     property alias debugLogWindow: debugLogWindow
-    
+
     // 컨트롤 alias (Screen01.qml에서 접근)
     property alias comboBox: comboBox
     property alias startButton: startButton
+    property alias processRefreshButton: processRefreshButton
+    property alias captureRegionButton: captureRegionButton
+    property alias captureIntervalSlider: captureIntervalSlider
+    property alias sentencesListView: sentencesListView
+    property alias sentenceListModel: sentenceListModel
+    property alias tokenListModel: tokenListModel
 
     // Flow 대신 Column 사용하여 레이아웃 개선
     Column {
@@ -133,7 +142,7 @@ Rectangle {
         Rectangle {
             id: listViewBox
             width: parent.width
-            height: parent.height * 0.55 // 전체 높이의 55% (50% → 55%)
+            height: parent.height * 0.55
             visible: true
             color: "#00ffffff"
             radius: 25
@@ -141,42 +150,58 @@ Rectangle {
             border.width: 2
 
             ListView {
-                id: listView
+                id: sentencesListView
                 anchors.fill: parent
                 anchors.margins: 15
-                clip: true // 스크롤 시 내용 잘리도록
-                spacing: 5 // 아이템 간 간격
-                model: ListModel {
-                    ListElement {
-                        name: "これはテストです"
-                        colorCode: "#fa9393"
-                    }
-                    ListElement {
-                        name: "日本語の文章"
-                        colorCode: "#fa9393"
-                    }
-                    ListElement {
-                        name: "サンプルテキスト"
-                        colorCode: "#fa9393"
-                    }
+                clip: true
+                spacing: 5
+                model: sentenceListModel
+                ScrollBar.vertical: ScrollBar {
+                    policy: ScrollBar.AsNeeded
                 }
-                delegate: Row {
-                    spacing: 10
-                    width: listView.width
+
+                delegate: Item {
+                    width: sentencesListView.width
+                    height: screen01Form.japaneseFontSize + 12
+                    property bool selected: ListView.isCurrentItem
 
                     Rectangle {
-                        width: 4
-                        height: screen01Form.japaneseFontSize + 5
-                        color: "#5a9fd4"
-                        radius: 2
+                        anchors.fill: parent
+                        radius: 14
+                        color: selected ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(1, 1, 1, 0.0)
+                        border.color: selected ? "#fa9393" : "transparent"
+                        border.width: selected ? 1 : 0
                     }
 
-                    Text {
-                        text: name
-                        color: "#ffffff"
-                        font.pixelSize: screen01Form.japaneseFontSize
-                        font.family: "IPAexGothic"
-                        verticalAlignment: Text.AlignVCenter
+                    Row {
+                        anchors.fill: parent
+                        anchors.margins: 6
+                        spacing: 10
+
+                        Rectangle {
+                            width: 4
+                            anchors.verticalCenter: parent.verticalCenter
+                            height: parent.height - 12
+                            color: selected ? "#fa9393" : "#5a9fd4"
+                            radius: 2
+                        }
+
+                        Text {
+                            text: model.text
+                            color: "#ffffff"
+                            font.pixelSize: screen01Form.japaneseFontSize
+                            font.family: "IPAexGothic"
+                            verticalAlignment: Text.AlignVCenter
+                            width: sentencesListView.width - 40
+                            wrapMode: Text.Wrap
+                        }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: sentencesListView.currentIndex = index
                     }
                 }
             }
@@ -204,6 +229,70 @@ Rectangle {
                     id: scrollView
                     anchors.fill: parent
                     anchors.margins: 10
+
+                    Column {
+                        id: tokenColumn
+                        width: scrollView.width - 20
+                        spacing: 6
+
+                        Repeater {
+                            id: tokenRepeater
+                            model: tokenListModel
+
+                            delegate: Rectangle {
+                                width: tokenColumn.width
+                                height: 48
+                                radius: 8
+                                color: Qt.rgba(1, 1, 1, 0.05)
+                                border.color: "#3d3d3d"
+                                border.width: 1
+
+                                Row {
+                                    anchors.fill: parent
+                                    anchors.margins: 8
+                                    spacing: 12
+
+                                    Column {
+                                        width: parent.width * 0.4
+                                        spacing: 2
+
+                                        Text {
+                                            text: surface
+                                            color: "#ffffff"
+                                            font.pixelSize: 16
+                                            font.family: "IPAexGothic"
+                                        }
+
+                                        Text {
+                                            text: reading
+                                            color: "#bbbbbb"
+                                            font.pixelSize: 14
+                                            font.family: "IPAexGothic"
+                                        }
+                                    }
+
+                                    Column {
+                                        width: parent.width * 0.6 - 12
+                                        spacing: 2
+
+                                        Text {
+                                            text: qsTr("기본형: %1").arg(baseForm)
+                                            color: "#ffffff"
+                                            font.pixelSize: 14
+                                            font.family: "Maplestory OTF"
+                                        }
+
+                                        Text {
+                                            text: qsTr("품사: %1").arg(partOfSpeech)
+                                            color: "#bbbbbb"
+                                            font.pixelSize: 12
+                                            font.family: "Maplestory OTF"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
                 Button {
@@ -257,54 +346,145 @@ Rectangle {
                     Text {
                         id: text3
                         width: parent.width
-                        height: 30 // 고정 높이
+                        height: 30
                         text: qsTr("캡쳐할 프로그램")
                         font.pixelSize: 20
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                         font.family: "Maplestory OTF"
-                        color: "#ffffff" // 다크모드용 흰색
+                        color: "#ffffff"
                     }
 
-                    ComboBox {
-                        id: comboBox
+                    RowLayout {
                         width: parent.width
-                        height: 45 // 약간 줄임
-                        font.family: "Maplestory OTF"
+                        height: 50
+                        spacing: 12
+
+                        ComboBox {
+                            id: comboBox
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: parent.height
+                            font.family: "Maplestory OTF"
+                            enabled: !appBackend.isCapturing
+                            opacity: enabled ? 1 : 0.95
+                            Component.onCompleted: comboBox.currentIndex = -1
+
+                            background: Rectangle {
+                                radius: 18
+                                color: comboBox.enabled ? "#2c2a33" : "#1f1c27"
+                                border.color: comboBox.activeFocus ? "#6b5fb3" : "#3a3844"
+                                border.width: comboBox.activeFocus ? 2 : 1
+                            }
+
+                            contentItem: Text {
+                                text: comboBox.currentIndex >= 0 && comboBox.displayText.length > 0
+                                      ? comboBox.displayText
+                                      : qsTr("프로세스를 선택하세요")
+                                font: comboBox.font
+                                color: comboBox.currentIndex >= 0 ? "#ffffff" : "#dcd4ff"
+                                verticalAlignment: Text.AlignVCenter
+                                horizontalAlignment: Text.AlignLeft
+                                elide: Text.ElideRight
+                                leftPadding: 16
+                                rightPadding: 16
+                            }
+                        }
+
+                        Button {
+                            id: processRefreshButton
+                            Layout.preferredWidth: 55
+                            Layout.preferredHeight: 50
+                            text: "⟳"
+                            font.bold: true
+                            font.family: "Maplestory OTF"
+                            font.pixelSize: 22
+                            focusPolicy: Qt.NoFocus
+                            enabled: !appBackend.isCapturing
+                            opacity: enabled ? 1 : 0.4
+                            hoverEnabled: true
+
+                            function triggerSpin() {
+                                refreshSpin.stop()
+                                refreshIcon.rotation = 0
+                                refreshSpin.start()
+                            }
+
+                            onHoveredChanged: if (hovered) triggerSpin()
+                            onPressed: triggerSpin()
+
+                            background: Rectangle {
+                                color: processRefreshButton.pressed ? "#8a7ac7" : (processRefreshButton.hovered ? "#a88aff" : "#9a7aff")
+                                radius: 20
+                                border.color: "#ffffff"
+                                border.width: processRefreshButton.hovered ? 2 : 0
+
+                                Behavior on color {
+                                    ColorAnimation { duration: 150 }
+                                }
+                            }
+
+                            contentItem: Item {
+                                anchors.fill: parent
+
+                                Text {
+                                    id: refreshIcon
+                                    anchors.centerIn: parent
+                                    text: processRefreshButton.text
+                                    font.pixelSize: processRefreshButton.font.pixelSize
+                                    font.family: "Maplestory OTF"
+                                    color: "#ffffff"
+                                    transformOrigin: Item.Center
+                                    scale: processRefreshButton.pressed ? 0.85 : 1.0
+
+                                    Behavior on scale {
+                                        NumberAnimation { duration: 120; easing.type: Easing.OutQuad }
+                                    }
+                                }
+
+                                PropertyAnimation {
+                                    id: refreshSpin
+                                    target: refreshIcon
+                                    property: "rotation"
+                                    from: 0
+                                    to: 360
+                                    duration: 500
+                                    loops: 1
+                                    running: false
+                                    onFinished: refreshIcon.rotation = 0
+                                }
+                            }
+                        }
                     }
 
                     Item {
                         width: parent.width
-                        height: 5 // 추가 간격
+                        height: 5
                     }
 
                     // 가로 배치: 왼쪽(슬라이더) + 오른쪽(버튼 2개)
                     Row {
-                        id: row
                         width: parent.width
                         spacing: 10
 
-                        // 왼쪽: 화면 캡쳐 간격
                         Column {
                             width: parent.width / 2 - 5
                             spacing: 5
 
                             Text {
-                                id: text1
                                 width: parent.width
-                                height: 30 // 고정 높이
-                                text: qsTr("화면 캡쳐 간격: %1초").arg(slider.value.toFixed(1))
+                                height: 30
+                                text: qsTr("화면 캡쳐 간격: %1초").arg(captureIntervalSlider.value.toFixed(1))
                                 font.pixelSize: 16
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
                                 font.family: "Maplestory OTF"
-                                color: "#ffffff" // 다크모드용 흰색
+                                color: "#ffffff"
                             }
 
                             Slider {
-                                id: slider
+                                id: captureIntervalSlider
                                 width: parent.width
-                                height: 40 // 고정 높이
+                                height: 40
                                 from: 0.1
                                 to: 5.0
                                 value: 1.0
@@ -312,36 +492,37 @@ Rectangle {
                             }
                         }
 
-                        // 오른쪽: 버튼 2개 세로 배치
                         Column {
                             width: parent.width / 2 - 5
                             spacing: 10
 
                             Button {
-                                id: button
+                                id: captureRegionButton
                                 width: parent.width
                                 height: 40
                                 text: qsTr("캡쳐 영역 선택")
                                 font.pointSize: 12
                                 font.family: "Maplestory OTF"
                                 font.bold: true
-                                
+                                enabled: screen01Form.hasProcessSelection && !appBackend.isCapturing
+                                opacity: enabled ? 1 : 0.4
+
                                 onClicked: screen01Form.showRegionSelector = true
-                                
+
                                 background: Rectangle {
-                                    color: button.pressed ? "#c75a7a" : (button.hovered ? "#e67799" : "#d66b88")
+                                    color: captureRegionButton.pressed ? "#c75a7a" : (captureRegionButton.hovered ? "#e67799" : "#d66b88")
                                     radius: 8
                                     border.color: "#ffffff"
-                                    border.width: button.hovered ? 2 : 0
-                                    
+                                    border.width: captureRegionButton.hovered ? 2 : 0
+
                                     Behavior on color {
                                         ColorAnimation { duration: 150 }
                                     }
                                 }
-                                
+
                                 contentItem: Text {
-                                    text: button.text
-                                    font: button.font
+                                    text: captureRegionButton.text
+                                    font: captureRegionButton.font
                                     color: "#ffffff"
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
@@ -358,18 +539,20 @@ Rectangle {
                                 font.bold: true
                                 checkable: true
                                 checked: false
-                                
+                                enabled: screen01Form.hasProcessSelection || appBackend.isCapturing
+                                opacity: enabled ? 1 : 0.4
+
                                 background: Rectangle {
                                     color: startButton.checked ? "#e74c3c" : (startButton.pressed ? "#27ae60" : (startButton.hovered ? "#3fca7a" : "#2ecc71"))
                                     radius: 8
                                     border.color: "#ffffff"
                                     border.width: startButton.hovered ? 2 : 0
-                                    
+
                                     Behavior on color {
                                         ColorAnimation { duration: 150 }
                                     }
                                 }
-                                
+
                                 contentItem: Text {
                                     text: startButton.text
                                     font: startButton.font
@@ -395,5 +578,13 @@ Rectangle {
     DebugLogWindow {
         id: debugLogWindow
         parentController: screen01Form
+    }
+
+    ListModel {
+        id: sentenceListModel
+    }
+
+    ListModel {
+        id: tokenListModel
     }
 }

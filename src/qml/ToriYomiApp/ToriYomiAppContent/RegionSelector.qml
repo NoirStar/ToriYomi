@@ -6,14 +6,10 @@ import QtQuick.Window
 Window {
     id: regionSelector
     
-    // 메인 창 크기의 절반
-    width: 640
-    height: 480
-    
     title: qsTr("캡쳐 영역 선택")
     flags: Qt.Window | Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint
     modality: Qt.ApplicationModal
-    color: "transparent"
+    color: "#111214"
     
     // 외부에서 컨트롤할 property
     property var parentController: null
@@ -22,6 +18,38 @@ Window {
     property rect selectedRegion: Qt.rect(0, 0, 0, 0)
     property bool isSelecting: false
     property point dragStart: Qt.point(0, 0)
+    property size captureWindowSize: Qt.size(appBackend.previewImageSize.width,
+                                             appBackend.previewImageSize.height)
+    property var scaledPreviewSize: calculateScaledSize()
+    width: scaledPreviewSize.width
+    height: scaledPreviewSize.height
+
+    function calculateScaledSize() {
+        var sourceWidth = captureWindowSize.width > 0 ? captureWindowSize.width : 800
+        var sourceHeight = captureWindowSize.height > 0 ? captureWindowSize.height : 600
+        var maxWidth = 1280
+        var maxHeight = 900
+        var minWidth = 360
+        var minHeight = 240
+        var scale = Math.min(1.0, Math.min(maxWidth / sourceWidth, maxHeight / sourceHeight))
+        var scaledWidth = sourceWidth * scale
+        var scaledHeight = sourceHeight * scale
+        var aspect = sourceHeight / sourceWidth
+        if (scaledWidth < minWidth && sourceWidth > minWidth) {
+            scaledWidth = minWidth
+            scaledHeight = minWidth * aspect
+        }
+        if (scaledHeight < minHeight && sourceHeight > minHeight) {
+            scaledHeight = minHeight
+            scaledWidth = minHeight / aspect
+        }
+        scaledWidth = Math.min(scaledWidth, sourceWidth)
+        scaledHeight = Math.min(scaledHeight, sourceHeight)
+        return {
+            width: Math.round(scaledWidth),
+            height: Math.round(scaledHeight)
+        }
+    }
     
     // visible이 false로 변경될 때 완전히 초기화
     onVisibleChanged: {
@@ -39,6 +67,30 @@ Window {
         console.log("RegionSelector: onClosing")
         visible = false
     }
+
+    function imageBounds() {
+        var paintedWidth = previewImage.paintedWidth > 0 ? previewImage.paintedWidth : mouseArea.width
+        var paintedHeight = previewImage.paintedHeight > 0 ? previewImage.paintedHeight : mouseArea.height
+        var offsetX = (mouseArea.width - paintedWidth) / 2
+        var offsetY = (mouseArea.height - paintedHeight) / 2
+        return {
+            x: offsetX,
+            y: offsetY,
+            width: paintedWidth,
+            height: paintedHeight
+        }
+    }
+
+    function clampPointToImage(x, y) {
+        var bounds = imageBounds()
+        var minX = bounds.x
+        var maxX = bounds.x + bounds.width
+        var minY = bounds.y
+        var maxY = bounds.y + bounds.height
+        var clampedX = Math.max(minX, Math.min(maxX, x))
+        var clampedY = Math.max(minY, Math.min(maxY, y))
+        return Qt.point(clampedX, clampedY)
+    }
     
     // 시그널
     signal regionSelected(rect region)
@@ -47,7 +99,7 @@ Window {
     // 배경 컨테이너
     Rectangle {
         anchors.fill: parent
-        color: Qt.rgba(0, 0, 0, 0.5)
+        color: "#151515"
         border.color: "#2b2b2b"
         border.width: 0
         radius: 10
@@ -155,6 +207,7 @@ Window {
         
         // 메인 컨텐츠 영역
         Rectangle {
+            id: contentArea
             anchors.fill: parent
             anchors.topMargin: 40
             color: "transparent"
@@ -166,10 +219,12 @@ Window {
                 id: previewImage
                 anchors.fill: parent
                 fillMode: Image.PreserveAspectFit
-                opacity: 0.7
-                
-                // TODO: C++ backend에서 캡쳐 이미지 제공
-                // source: backendImageProvider
+                horizontalAlignment: Image.AlignHCenter
+                verticalAlignment: Image.AlignVCenter
+                asynchronous: true
+                cache: false
+                source: appBackend.previewImageData
+                opacity: 1.0
             }
             
             // 선택 영역 표시
@@ -180,55 +235,61 @@ Window {
                 border.width: 2
                 visible: regionSelector.isSelecting
                 
-                property real clampedMouseX: Math.max(0, Math.min(mouseArea.mouseX, mouseArea.width))
-                property real clampedMouseY: Math.max(0, Math.min(mouseArea.mouseY, mouseArea.height))
-                property real clampedStartX: Math.max(0, Math.min(regionSelector.dragStart.x, mouseArea.width))
-                property real clampedStartY: Math.max(0, Math.min(regionSelector.dragStart.y, mouseArea.height))
+                property point currentMouse: regionSelector.clampPointToImage(mouseArea.mouseX, mouseArea.mouseY)
+                property real clampedStartX: regionSelector.dragStart.x
+                property real clampedStartY: regionSelector.dragStart.y
                 
-                x: Math.min(clampedStartX, clampedMouseX)
-                y: Math.min(clampedStartY, clampedMouseY)
-                width: Math.abs(clampedMouseX - clampedStartX)
-                height: Math.abs(clampedMouseY - clampedStartY)
+                x: Math.min(clampedStartX, currentMouse.x)
+                y: Math.min(clampedStartY, currentMouse.y)
+                width: Math.abs(currentMouse.x - clampedStartX)
+                height: Math.abs(currentMouse.y - clampedStartY)
             
-            // 선택 영역 내부 밝게 표시
-            Rectangle {
-                anchors.fill: parent
-                color: Qt.rgba(1, 1, 1, 0.2)
+                // 선택 영역 내부 밝게 표시
+                Rectangle {
+                    anchors.fill: parent
+                    color: Qt.rgba(1, 1, 1, 0.2)
+                }
             }
         }
         
         // 마우스 영역
         MouseArea {
             id: mouseArea
-            anchors.fill: parent
+            anchors.fill: contentArea
             hoverEnabled: true
             cursorShape: Qt.CrossCursor
             
             onPressed: (mouse) => {
-                // 좌표를 컨텐츠 영역 내로 제한
-                const clampedX = Math.max(0, Math.min(mouse.x, mouseArea.width))
-                const clampedY = Math.max(0, Math.min(mouse.y, mouseArea.height))
-                regionSelector.dragStart = Qt.point(clampedX, clampedY)
+                var clampedPoint = regionSelector.clampPointToImage(mouse.x, mouse.y)
+                regionSelector.dragStart = clampedPoint
                 regionSelector.isSelecting = true
             }
             
             onReleased: (mouse) => {
                 if (regionSelector.isSelecting) {
-                    // 좌표를 컨텐츠 영역 내로 제한
-                    const clampedMouseX = Math.max(0, Math.min(mouse.x, mouseArea.width))
-                    const clampedMouseY = Math.max(0, Math.min(mouse.y, mouseArea.height))
-                    
-                    const x = Math.min(regionSelector.dragStart.x, clampedMouseX)
-                    const y = Math.min(regionSelector.dragStart.y, clampedMouseY)
-                    const w = Math.abs(clampedMouseX - regionSelector.dragStart.x)
-                    const h = Math.abs(clampedMouseY - regionSelector.dragStart.y)
+                    var bounds = regionSelector.imageBounds()
+                    var endPoint = regionSelector.clampPointToImage(mouse.x, mouse.y)
+                    var x = Math.min(regionSelector.dragStart.x, endPoint.x)
+                    var y = Math.min(regionSelector.dragStart.y, endPoint.y)
+                    var w = Math.abs(endPoint.x - regionSelector.dragStart.x)
+                    var h = Math.abs(endPoint.y - regionSelector.dragStart.y)
                     
                     // 최소 크기 체크 (10x10 픽셀)
                     if (w > 10 && h > 10) {
-                        regionSelector.selectedRegion = Qt.rect(x, y, w, h)
+            var scaleX = (regionSelector.captureWindowSize.width > 0 && bounds.width > 0)
+                                ? regionSelector.captureWindowSize.width / bounds.width : 1
+            var scaleY = (regionSelector.captureWindowSize.height > 0 && bounds.height > 0)
+                                ? regionSelector.captureWindowSize.height / bounds.height : 1
+            var offsetX = bounds.x
+            var offsetY = bounds.y
+            var actualX = Math.round((x - offsetX) * scaleX)
+            var actualY = Math.round((y - offsetY) * scaleY)
+            var actualW = Math.round(w * scaleX)
+            var actualH = Math.round(h * scaleY)
+                        regionSelector.selectedRegion = Qt.rect(actualX, actualY, actualW, actualH)
                         regionSelector.regionSelected(regionSelector.selectedRegion)
-                        console.log("Selected region: x=" + x + " y=" + y + " w=" + w + " h=" + h)
-                        // TODO: C++ backend에 선택된 영역 전달
+                        console.log("Selected region (display): x=" + x + " y=" + y + " w=" + w + " h=" + h)
+                        console.log("Selected region (actual): x=" + actualX + " y=" + actualY + " w=" + actualW + " h=" + actualH)
                         regionSelector.visible = false
                         if (regionSelector.parentController) {
                             regionSelector.parentController.showRegionSelector = false
@@ -267,7 +328,6 @@ Window {
             }
         }
         }
-    }
     
     // ESC 키로 취소
     Shortcut {

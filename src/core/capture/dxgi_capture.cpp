@@ -21,11 +21,14 @@ struct DxgiCapture::Impl {
     ComPtr<ID3D11DeviceContext> d3dContext;
     ComPtr<IDXGIOutputDuplication> deskDupl;
     ComPtr<ID3D11Texture2D> stagingTexture;
+    ComPtr<IDXGIAdapter> adapterForWindow;
+    ComPtr<IDXGIOutput> outputForWindow;
 
     // 화면 정보
     DXGI_OUTDUPL_DESC outputDuplDesc{};
     D3D11_TEXTURE2D_DESC textureDesc{};
 
+    bool SelectOutputForWindow();
     bool InitializeD3D();
     bool InitializeDuplication();
     bool CreateStagingTexture();
@@ -55,6 +58,10 @@ bool DxgiCapture::Initialize(HWND targetWindow) {
     }
 
     pImpl_->targetWindow = targetWindow;
+
+    if (!pImpl_->SelectOutputForWindow()) {
+        return false;
+    }
 
     // D3D11 디바이스 초기화
     if (!pImpl_->InitializeD3D()) {
@@ -134,6 +141,8 @@ void DxgiCapture::Shutdown() {
         pImpl_->deskDupl.Reset();
         pImpl_->d3dContext.Reset();
         pImpl_->d3dDevice.Reset();
+        pImpl_->adapterForWindow.Reset();
+        pImpl_->outputForWindow.Reset();
         pImpl_->initialized = false;
         pImpl_->targetWindow = nullptr;
     }
@@ -146,66 +155,61 @@ bool DxgiCapture::IsInitialized() const {
 // === Impl 메서드 구현 ===
 
 bool DxgiCapture::Impl::InitializeD3D() {
-    // D3D11 디바이스 생성
     D3D_FEATURE_LEVEL featureLevel;
+    IDXGIAdapter* adapterPtr = adapterForWindow.Get();
+    const D3D_DRIVER_TYPE driverType = adapterPtr ? D3D_DRIVER_TYPE_UNKNOWN
+                                                  : D3D_DRIVER_TYPE_HARDWARE;
+
     HRESULT hr = D3D11CreateDevice(
-        nullptr,                    // 기본 어댑터
-        D3D_DRIVER_TYPE_HARDWARE,   // 하드웨어 가속
-        nullptr,                    // 소프트웨어 래스터라이저 없음
-        0,                          // 플래그
-        nullptr,                    // 기능 레벨 배열
-        0,                          // 기능 레벨 수
+        adapterPtr,
+        driverType,
+        nullptr,
+        0,
+        nullptr,
+        0,
         D3D11_SDK_VERSION,
         &d3dDevice,
         &featureLevel,
         &d3dContext
     );
 
-    if (FAILED(hr)) {
-        return false;
-    }
-
-    return true;
+    return SUCCEEDED(hr);
 }
 
 bool DxgiCapture::Impl::InitializeDuplication() {
-    // DXGI 디바이스 가져오기
-    ComPtr<IDXGIDevice> dxgiDevice;
-    HRESULT hr = d3dDevice.As(&dxgiDevice);
-    if (FAILED(hr)) {
-        return false;
+    ComPtr<IDXGIOutput> dxgiOutput = outputForWindow;
+    ComPtr<IDXGIAdapter> adapter = adapterForWindow;
+
+    if (!dxgiOutput) {
+        ComPtr<IDXGIDevice> dxgiDevice;
+        HRESULT hr = d3dDevice.As(&dxgiDevice);
+        if (FAILED(hr)) {
+            return false;
+        }
+
+        hr = dxgiDevice->GetAdapter(&adapter);
+        if (FAILED(hr)) {
+            return false;
+        }
+
+        hr = adapter->EnumOutputs(0, &dxgiOutput);
+        if (FAILED(hr)) {
+            return false;
+        }
     }
 
-    // DXGI 어댑터 가져오기
-    ComPtr<IDXGIAdapter> dxgiAdapter;
-    hr = dxgiDevice->GetAdapter(&dxgiAdapter);
-    if (FAILED(hr)) {
-        return false;
-    }
-
-    // 첫 번째 출력 가져오기 (주 모니터)
-    ComPtr<IDXGIOutput> dxgiOutput;
-    hr = dxgiAdapter->EnumOutputs(0, &dxgiOutput);
-    if (FAILED(hr)) {
-        return false;
-    }
-
-    // IDXGIOutput1로 캐스팅
     ComPtr<IDXGIOutput1> dxgiOutput1;
-    hr = dxgiOutput.As(&dxgiOutput1);
+    HRESULT hr = dxgiOutput.As(&dxgiOutput1);
     if (FAILED(hr)) {
         return false;
     }
 
-    // Desktop Duplication 생성
     hr = dxgiOutput1->DuplicateOutput(d3dDevice.Get(), &deskDupl);
     if (FAILED(hr)) {
         return false;
     }
 
-    // 출력 설명 가져오기
     deskDupl->GetDesc(&outputDuplDesc);
-
     return true;
 }
 
@@ -263,6 +267,54 @@ cv::Mat DxgiCapture::Impl::ConvertTextureToMat(ID3D11Texture2D* texture) {
     d3dContext->Unmap(texture, 0);
 
     return result;
+}
+
+bool DxgiCapture::Impl::SelectOutputForWindow() {
+    HMONITOR monitor = MonitorFromWindow(targetWindow, MONITOR_DEFAULTTONEAREST);
+    if (!monitor) {
+        return false;
+    }
+
+    ComPtr<IDXGIFactory1> factory;
+    HRESULT hr = CreateDXGIFactory1(IID_PPV_ARGS(&factory));
+    if (FAILED(hr)) {
+        return false;
+    }
+
+    for (UINT adapterIndex = 0;; ++adapterIndex) {
+        ComPtr<IDXGIAdapter> adapter;
+        hr = factory->EnumAdapters(adapterIndex, &adapter);
+        if (hr == DXGI_ERROR_NOT_FOUND) {
+            break;
+        }
+        if (FAILED(hr)) {
+            return false;
+        }
+
+        for (UINT outputIndex = 0;; ++outputIndex) {
+            ComPtr<IDXGIOutput> output;
+            hr = adapter->EnumOutputs(outputIndex, &output);
+            if (hr == DXGI_ERROR_NOT_FOUND) {
+                break;
+            }
+            if (FAILED(hr)) {
+                return false;
+            }
+
+            DXGI_OUTPUT_DESC desc;
+            if (FAILED(output->GetDesc(&desc))) {
+                continue;
+            }
+
+            if (desc.Monitor == monitor) {
+                adapterForWindow = adapter;
+                outputForWindow = output;
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 } // namespace toriyomi::capture

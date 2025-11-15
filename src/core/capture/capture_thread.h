@@ -5,7 +5,16 @@
 
 #include "core/capture/frame_queue.h"
 #include <opencv2/opencv.hpp>
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <Windows.h>
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
 #include <memory>
 #include <atomic>
 
@@ -96,6 +105,11 @@ public:
      * @param enable true면 활성화, false면 비활성화
      */
     void SetChangeDetection(bool enable);
+
+    /**
+     * @brief 캡처 간격 설정 (밀리초)
+     */
+    void SetCaptureIntervalMilliseconds(int intervalMs);
 
     /**
      * @brief 캡처 통계 가져오기

@@ -8,8 +8,8 @@ ToriYomi는 OCR 엔진을 쉽게 교체할 수 있도록 추상 인터페이스�
 
 ```
 IOcrEngine (추상 인터페이스)
-    ├── TesseractWrapper (현재 구현)
-    ├── PaddleOcrWrapper (미래 구현)
+    ├── PaddleOcrWrapper (FastDeploy, 기본값)
+    ├── TesseractWrapper (폴백)
     └── EasyOcrWrapper (미래 구현)
 ```
 
@@ -142,18 +142,21 @@ target_link_libraries(toriyomi_ocr
 
 ### ✅ 구현됨:
 - `IOcrEngine` 추상 인터페이스
-- `TesseractWrapper` 구현
-- `OcrEngineFactory` 팩토리 패턴
-- 단위 테스트 (10개)
+- `PaddleOcrWrapper` (FastDeploy PPOCRv4 파이프라인, **기본 엔진**)
+- `TesseractWrapper` (폴백 엔진)
+- `OcrEngineFactory` & `OcrEngineBootstrapper` (Paddle → Tesseract 자동 폴백)
+- 단위 테스트 (11개+)
+- CMake 자동 DLL 배포 시스템
+- UI 기본 설정: PaddleOCR 우선
 
 ### 🚧 향후 계획:
 1. **실제 게임 화면 테스트**
-   - Tesseract 성능 측정
+   - PaddleOCR vs Tesseract 성능 비교
    - 인식률, 속도 평가
 
-2. **필요시 PaddleOCR 추가**
-   - C++ API 또는 Python 바인딩
-   - 성능 비교 테스트
+2. **PaddleOCR 최적화**
+    - 모델 전처리 & 배포 자동화
+    - GPU 가속 지원 검토
 
 3. **전처리 파이프라인**
    - 이진화, 노이즈 제거

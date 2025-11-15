@@ -163,6 +163,31 @@ Window {
                         font.family: "Maplestory OTF"
                     }
                 }
+
+                Button {
+                    text: qsTr("ROI 스냅샷 저장")
+                    onClicked: {
+                        var path = appBackend.saveCurrentRoiSnapshot()
+                        if (path && path.length > 0) {
+                            debugWindow.addLog(qsTr("ROI 스냅샷 저장: %1").arg(path))
+                        } else {
+                            debugWindow.addLog(qsTr("ROI 스냅샷 저장 실패"))
+                        }
+                    }
+
+                    background: Rectangle {
+                        color: parent.pressed ? "#5c50d6" : (parent.hovered ? "#7b6fff" : "#6a5def")
+                        radius: 5
+                    }
+
+                    contentItem: Text {
+                        text: parent.text
+                        color: "#ffffff"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        font.family: "Maplestory OTF"
+                    }
+                }
                 
                 Text {
                     text: qsTr("총 %1개 로그").arg(logListModel.count)

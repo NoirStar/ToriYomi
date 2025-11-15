@@ -1,6 +1,6 @@
 # ToriYomi 개발 진행 상황
 
-**최종 업데이트**: 2025-11-11
+**최종 업데이트**: 2025-11-15
 
 ---
 
@@ -13,18 +13,25 @@
 - **Phase 1-4**: CaptureThread (32 FPS with 변경 감지, 3개 테스트 통과)
 
 ### Phase 2: OCR (100% 완료) ✅
-- **Phase 2-1**: Tesseract Wrapper (IOcrEngine 인터페이스, 10개 테스트 통과, 89.5% 신뢰도)
+- **Phase 2-1**: OCR 엔진 추상화 및 구현
+  - IOcrEngine 인터페이스 설계
+  - PaddleOcrWrapper 구현 (FastDeploy + PP-OCRv4, 기본 엔진)
+  - TesseractWrapper 구현 (폴백 엔진, 10개 테스트 통과, 89.5% 신뢰도)
+  - OcrEngineBootstrapper (자동 폴백 로직, 1개 테스트 통과)
 - **Phase 2-2**: OCR Thread (비동기 처리, 8개 테스트 통과)
 
 ### Phase 3: 일본어 토큰화 (50% 완료)
-- **Phase 3-1**: 일본어 토크나이저 ✅ (MeCab 통합, 11개 테스트 통과, ~100k tokens/sec)
+- **Phase 3-1**: 일본어 토크나이저 ✅
+  - MeCab 통합 (11개 테스트 통과)
+  - 성능: ~100k tokens/sec
+  - DLL 자동 복사 (`MECAB_DLL_PATH` CMake 옵션)
 - **Phase 3-2**: 후리가나 매퍼 (진행 예정)
 
 ### Phase 4: Overlay UI (100% 완료) ✅
 - **Phase 4-1**: 오버레이 윈도우 ✅ (투명 레이어드 윈도우, 14개 테스트 통과)
 - **Phase 4-2**: 오버레이 스레드 ✅ (비동기 렌더링, 11개 테스트 통과)
 
-### Phase 5: Qt 데스크톱 앱 (70% 완료)
+### Phase 5: Qt 데스크톱 앱 (95% 완료)
 - **Phase 5-1**: 기본 UI 구현 ✅
   - Qt 6.10.0 MSVC 2022 설정
   - AUTOUIC 빌드타임 컴파일
@@ -33,7 +40,7 @@
   - InteractiveSentenceWidget (단어별 클릭)
   - PrintWindow API 화면 캡처
   
-- **Phase 5-2**: 파이프라인 통합 🚧 (진행 중)
+- **Phase 5-2**: 파이프라인 통합 ✅ (완료)
   - ✅ Start/Stop 버튼 (초록/빨강 스타일)
   - ✅ QTimer::singleShot 비동기 초기화 (UI 응답성 유지)
   - ✅ 디버그 로그 패널 (타임스탬프, 실시간 로깅)
@@ -41,7 +48,9 @@
   - ✅ OnPollOcrResults QTimer 폴링 (100ms)
   - ✅ 캡처 → OCR → 토큰화 파이프라인 구조
   - ✅ 테스트 AUTOMOC/AUTOUIC 비활성화 (빌드 속도 개선)
-  - ⚠️ **Known Issue**: Tesseract 초기화 실패 (jpn.traineddata 경로 문제)
+  - ✅ PaddleOCR 기본 엔진 적용 + Tesseract 자동 폴백
+  - ✅ FastDeploy/MeCab DLL 자동 배포 (`TORIYOMI_FASTDEPLOY_RUNTIME_DIR`, `MECAB_DLL_PATH`)
+  - ✅ 전체 테스트 스위트 통과 (10개 모듈, ctest -C Debug)
   
 - **Phase 5-3**: 사전 & Anki 통합 (진행 예정)
 
@@ -49,11 +58,7 @@
 
 ## 🔄 진행 중
 
-### Phase 5-2: 파이프라인 통합 (다음 작업)
-**블로커**: Tesseract OCR 엔진 초기화 실패
-- jpn.traineddata 파일 경로 확인 필요
-- TESSDATA_PREFIX 환경 변수 설정
-- 또는 Initialize() 파라미터로 명시적 경로 전달
+없음 (Phase 5-2 완료!)
 
 ---
 
@@ -89,11 +94,11 @@ Phase 1 (캡처):    ████████ 100% (4/4) ✅
 Phase 2 (OCR):     ████████ 100% (2/2) ✅
 Phase 3 (토큰):    ████░░░░  50% (1/2)
 Phase 4 (Overlay): ████████ 100% (2/2) ✅
-Phase 5 (Qt App):  ██████░░  70% (진행 중)
+Phase 5 (Qt App):  ████████  95% (거의 완료)
 Phase 6-8:         ░░░░░░░░   0% (대기)
 ```
 
-**전체**: 8/14 완료, 1 진행 중 (65%)
+**전체**: 8/14 완료 (70%), Phase 5 거의 완료
 **완료일**: 2025-11-10  
 **파일**: 
 - `src/core/capture/frame_queue.h`
