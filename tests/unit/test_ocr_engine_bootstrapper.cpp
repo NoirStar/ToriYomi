@@ -4,14 +4,7 @@
 
 using namespace toriyomi::ocr;
 
-TEST(OcrEngineFactoryTest, CanCreateTesseractEngine) {
-    auto engine = OcrEngineFactory::CreateEngine(OcrEngineType::Tesseract);
-    ASSERT_NE(engine, nullptr);
-    EXPECT_EQ(engine->GetEngineName(), "Tesseract");
-    EXPECT_FALSE(engine->IsInitialized());
-}
-
-TEST(OcrEngineFactoryTest, CanCreatePaddleEngineSkeleton) {
+TEST(OcrEngineFactoryTest, CanCreatePaddleEngine) {
     auto engine = OcrEngineFactory::CreateEngine(OcrEngineType::PaddleOCR);
     ASSERT_NE(engine, nullptr);
     EXPECT_EQ(engine->GetEngineName(), "PaddleOCR");
@@ -23,25 +16,21 @@ TEST(OcrEngineBootstrapperTest, PrefersPaddleByDefault) {
     EXPECT_EQ(bootstrapper.GetPreferredEngine(), OcrEngineType::PaddleOCR);
 }
 
-TEST(OcrEngineBootstrapperTest, ReturnsNullWhenTessdataMissing) {
+TEST(OcrEngineBootstrapperTest, MissingModelDirectoryReturnsNull) {
     OcrBootstrapConfig config;
-    config.tessdataSearchPaths = {"Z:/definitely/missing/path"};
-    config.allowTesseractFallback = false;
+    config.paddleModelDirectory.clear();
 
     OcrEngineBootstrapper bootstrapper(config);
-    bootstrapper.SetPreferredEngine(OcrEngineType::Tesseract);
+    bootstrapper.SetPreferredEngine(OcrEngineType::PaddleOCR);
 
     auto engine = bootstrapper.CreateAndInitialize();
     EXPECT_EQ(engine, nullptr);
 }
 
-TEST(OcrEngineBootstrapperTest, PaddleWithoutModelAlsoFailsGracefully) {
-    OcrBootstrapConfig config;
-    config.paddleModelDirectory = "";
-    config.allowTesseractFallback = false;
-
-    OcrEngineBootstrapper bootstrapper(config);
-    bootstrapper.SetPreferredEngine(OcrEngineType::PaddleOCR);
+TEST(OcrEngineBootstrapperTest, SupportsChangingPreferredEngine) {
+    OcrEngineBootstrapper bootstrapper;
+    bootstrapper.SetPreferredEngine(OcrEngineType::EasyOCR);
+    EXPECT_EQ(bootstrapper.GetPreferredEngine(), OcrEngineType::EasyOCR);
 
     auto engine = bootstrapper.CreateAndInitialize();
     EXPECT_EQ(engine, nullptr);

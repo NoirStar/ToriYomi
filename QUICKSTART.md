@@ -17,8 +17,9 @@ cd C:\
 mkdir dev
 cd dev
 git clone https://github.com/Microsoft/vcpkg.git
-cd vcpkg
-.\bootstrap-vcpkg.bat
+   -DCMAKE_PREFIX_PATH="C:/Qt/6.10.0/msvc2022_64" `
+   -DTORIYOMI_PADDLE_DIR="C:/Dev/paddle_inference" `
+   -DTORIYOMI_PADDLE_RUNTIME_DIR="C:/Dev/paddle_inference/paddle/lib" `
 .\vcpkg integrate install
 ```
 
@@ -27,10 +28,6 @@ cd vcpkg
 ```powershell
 # OpenCV 설치 (약 10-15분 소요)
 .\vcpkg install opencv:x64-windows
-
-# Tesseract (OCR 폴백 엔진)
-.\vcpkg install tesseract:x64-windows
-.\vcpkg install leptonica:x64-windows
 
 # Google Test 설치
 .\vcpkg install gtest:x64-windows
@@ -46,15 +43,21 @@ cd vcpkg
 
 ### PaddleOCR 준비
 
-#### 1. FastDeploy 다운로드
-- [FastDeploy Releases](https://github.com/PaddlePaddle/FastDeploy/releases)에서 Windows CPU 패키지를 내려받고 예: `C:\dev\fastdeploy`에 압축을 해제합니다.
-- CMake 구성 시 `-DFastDeploy_DIR=C:/dev/fastdeploy/lib/cmake/FastDeploy` 또는 `-DCMAKE_PREFIX_PATH` 항목에 FastDeploy 경로를 추가합니다.
-- 실행 시 필요한 DLL을 자동으로 복사하고 싶다면 `-DTORIYOMI_FASTDEPLOY_RUNTIME_DIR=C:/dev/fastdeploy/lib` 처럼 지정합니다.
+#### 1. Paddle Inference SDK 설치
+- [Paddle Inference 다운로드 페이지](https://www.paddlepaddle.org.cn/inference/download)에서 **Windows CPU x64** 패키지를 받습니다.
+- 예를 들어 `C:\Dev\paddle_inference`에 압축을 풉니다.
+- CMake 구성 시 다음 인자를 전달합니다.
+   - `-DTORIYOMI_PADDLE_DIR="C:/Dev/paddle_inference"`
+   - `-DTORIYOMI_PADDLE_RUNTIME_DIR="C:/Dev/paddle_inference/paddle/lib"`
+- 지정된 런타임 폴더에 있는 DLL이 빌드 산출물 옆으로 자동 복사됩니다.
 
 #### 2. PaddleOCR 모델 배치
-- FastDeploy가 제공하는 PP-OCRv4/v5 모델 압축을 다운로드하고 `models/paddleocr` 경로에 압축을 풉니다.
-- 디렉터리에는 `det`, `cls`, `rec`, `ppocr_keys_v1.txt` 파일이 포함되어야 합니다.
-- 앱은 실행 파일 경로 기준 `models/paddleocr`를 기본으로 사용하므로, `build/bin/Debug/models/paddleocr` 와 같이 배치하면 됩니다.
+- 공식 [PaddleOCR release](https://github.com/PaddlePaddle/PaddleOCR/tree/release/2.7/deploy/cpp_infer)에서 PP-OCRv5 (det/rec) 패키지를 내려받습니다.
+- 아래 구조를 유지한 채 `models/paddleocr` 경로에 배치합니다.
+   - `models/paddleocr/det`
+   - `models/paddleocr/rec`
+   - `models/paddleocr/ppocr_keys_v1.txt`
+- 앱은 실행 파일 기준 상대 경로를 기본으로 사용하지만, UI 설정에서 다른 경로로 변경할 수 있습니다.
 
 ### 프로젝트 빌드
 
@@ -63,21 +66,22 @@ cd vcpkg
 git clone https://github.com/NoirStar/ToriYomi.git
 cd ToriYomi
 
-# 빌드 (vcpkg + FastDeploy 경로 지정)
-.\build.ps1 -VcpkgRoot "C:\dev\vcpkg"
+# 빌드 (vcpkg + Paddle 경로 지정)
+.\build.ps1 -VcpkgRoot "C:\dev\vcpkg" -PaddleDir "C:\Dev\paddle_inference" -PaddleRuntimeDir "C:\Dev\paddle_inference\paddle\lib"
 
 # 또는 수동 빌드
 mkdir build
 cd build
 cmake .. `
    -DCMAKE_TOOLCHAIN_FILE=C:\dev\vcpkg\scripts\buildsystems\vcpkg.cmake `
-   -DCMAKE_PREFIX_PATH="C:/Qt/6.10.0/msvc2022_64;C:/dev/fastdeploy" `
-   -DTORIYOMI_FASTDEPLOY_RUNTIME_DIR="C:/dev/fastdeploy/lib" `
+   -DCMAKE_PREFIX_PATH="C:/Qt/6.10.0/msvc2022_64" `
+   -DTORIYOMI_PADDLE_DIR="C:/Dev/paddle_inference" `
+   -DTORIYOMI_PADDLE_RUNTIME_DIR="C:/Dev/paddle_inference/paddle/lib" `
    -DMECAB_DLL_PATH="C:/Program Files/MeCab/bin/libmecab.dll"
 cmake --build . --config Release
 ```
 
-> 💡 **DLL 자동 배포**: `TORIYOMI_FASTDEPLOY_RUNTIME_DIR`와 `MECAB_DLL_PATH`를 지정하면 빌드 시 필요한 DLL들이 실행 파일 옆으로 자동 복사됩니다.
+> 💡 **DLL 자동 배포**: `TORIYOMI_PADDLE_RUNTIME_DIR`와 `MECAB_DLL_PATH`를 지정하면 빌드 시 필요한 DLL들이 실행 파일 옆으로 자동 복사됩니다.
 
 ### 테스트 실행
 

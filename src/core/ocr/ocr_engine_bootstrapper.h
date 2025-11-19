@@ -9,11 +9,8 @@ namespace toriyomi {
 namespace ocr {
 
 struct OcrBootstrapConfig {
-    std::vector<std::string> tessdataSearchPaths;
-    std::string tessLanguage = "jpn";
     std::string paddleModelDirectory = "./models/paddleocr";
     std::string paddleLanguage = "jpn";
-    bool allowTesseractFallback = true;
 };
 
 class OcrEngineBootstrapper {
@@ -29,7 +26,6 @@ public:
     bool InitializeEngine(OcrEngineType type, const std::shared_ptr<IOcrEngine>& engine) const;
 
 private:
-    bool InitializeTesseract(const std::shared_ptr<IOcrEngine>& engine) const;
     bool InitializePaddleOcr(const std::shared_ptr<IOcrEngine>& engine) const;
 
     OcrBootstrapConfig config_;

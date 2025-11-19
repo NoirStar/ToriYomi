@@ -35,24 +35,15 @@ QString CurrentTimestamp() {
 
 toriyomi::ocr::OcrBootstrapConfig BuildDefaultOcrConfig() {
     toriyomi::ocr::OcrBootstrapConfig config;
-    config.tessdataSearchPaths = {
-        "C:/vcpkg/installed/x64-windows/share/tessdata",
-        "C:/Program Files/Tesseract-OCR/tessdata",
-        "./tessdata",
-        "../tessdata"
-    };
     const QDir baseDir(QCoreApplication::applicationDirPath());
     const QString paddleModels = QDir::cleanPath(baseDir.filePath("models/paddleocr"));
     config.paddleModelDirectory = QDir::toNativeSeparators(paddleModels).toStdString();
     config.paddleLanguage = "jpn";
-    config.allowTesseractFallback = true;
     return config;
 }
 
 QString OcrEngineNameForDisplay(toriyomi::ocr::OcrEngineType type) {
     switch (type) {
-        case toriyomi::ocr::OcrEngineType::Tesseract:
-            return QStringLiteral("Tesseract");
         case toriyomi::ocr::OcrEngineType::PaddleOCR:
             return QStringLiteral("PaddleOCR");
         case toriyomi::ocr::OcrEngineType::EasyOCR:
@@ -405,9 +396,6 @@ void AppBackend::setOcrEngineType(int engineType) {
     ocr::OcrEngineType resolved = selectedEngineType_;
 
     switch (engineType) {
-        case static_cast<int>(ocr::OcrEngineType::Tesseract):
-            resolved = ocr::OcrEngineType::Tesseract;
-            break;
         case static_cast<int>(ocr::OcrEngineType::PaddleOCR):
             resolved = ocr::OcrEngineType::PaddleOCR;
             break;

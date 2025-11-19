@@ -10,7 +10,7 @@ applyTo: '**/*.cpp, **/*.h, **/*.hpp'
 You are working on **ToriYomi**, a real-time Japanese OCR overlay tool for Windows. The project uses:
 - **C++20** with modern idioms (RAII, smart pointers, STL algorithms)
 - **Qt 6** for UI (Widgets, transparent overlay windows)
-- **Tesseract** for Japanese OCR
+- **PaddleOCR cpp_infer (Paddle Inference SDK)** for Japanese OCR
 - **OpenCV** for image processing
 - **CMake + Ninja** for builds
 - **Windows-specific APIs** (DXGI/GDI for screen capture, DWM for layered windows)
@@ -258,7 +258,7 @@ TEST(ScreenCaptureTest, captures_frames_at_30fps) {
 ### Test Coverage
 
 - **Unit test each module** in isolation
-- **Mock external dependencies** (Tesseract, Windows APIs)
+- **Mock external dependencies** (PaddleOCR runtime, Windows APIs)
 - **Test edge cases**: empty inputs, null pointers, timeouts
 
 ---
@@ -272,7 +272,7 @@ TEST(ScreenCaptureTest, captures_frames_at_30fps) {
 
 ```cpp
 SPDLOG_DEBUG("Captured frame {} at {}ms", frameId, latencyMs);
-SPDLOG_ERROR("Failed to initialize Tesseract: {}", errorMsg);
+SPDLOG_ERROR("Failed to initialize PaddleOCR: {}", errorMsg);
 ```
 
 ---

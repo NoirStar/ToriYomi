@@ -20,7 +20,7 @@ struct TextSegment {
 /**
  * @brief OCR 엔진 추상 인터페이스
  * 
- * 다양한 OCR 엔진(Tesseract, PaddleOCR, EasyOCR 등)을
+ * 다양한 OCR 엔진(PaddleOCR, EasyOCR 등)을
  * 교체 가능하도록 하는 공통 인터페이스.
  */
 class IOcrEngine {
@@ -59,7 +59,7 @@ public:
     /**
      * @brief OCR 엔진 이름 반환
      * 
-     * @return 엔진 이름 (예: "Tesseract", "PaddleOCR")
+    * @return 엔진 이름 (예: "PaddleOCR")
      */
     virtual std::string GetEngineName() const = 0;
 };
@@ -68,8 +68,7 @@ public:
  * @brief OCR 엔진 타입 열거형
  */
 enum class OcrEngineType {
-    Tesseract,    // Tesseract OCR
-    PaddleOCR,    // PaddleOCR (미래 구현)
+    PaddleOCR,    // PaddleOCR (기본 엔진)
     EasyOCR       // EasyOCR (미래 구현)
 };
 

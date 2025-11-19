@@ -3,13 +3,12 @@
 ## Prerequisites
 
 ### Required
-- **CMake** 3.20+
+- **CMake** 3.31+
 - **MSVC 2022** (Visual Studio 2022)
-- **OpenCV** 4.8+
-- **FastDeploy** 2.3+ (PaddleOCR runtime, default)
-- **Tesseract** 5.5+ (fallback OCR engine)
+- **OpenCV** 4.11+
+- **Paddle Inference SDK** 2.6+ (cpp_infer, CPU)
 - **MeCab** 0.996+ (Japanese tokenizer)
-- **Google Test** 1.12+
+- **Google Test** 1.17+
 
 ### Installation (Windows)
 
@@ -26,10 +25,6 @@ cd vcpkg
 # OpenCV
 .\vcpkg install opencv:x64-windows
 
-# Tesseract (OCR fallback)
-.\vcpkg install tesseract:x64-windows
-.\vcpkg install leptonica:x64-windows
-
 # Google Test
 .\vcpkg install gtest:x64-windows
 ```
@@ -41,14 +36,16 @@ cd vcpkg
 # Default install path: C:\Program Files\MeCab
 ```
 
-#### 4. Install FastDeploy
+#### 4. Install Paddle Inference SDK
 
-1. Download the latest Windows CPU package from the [FastDeploy releases](https://github.com/PaddlePaddle/FastDeploy/releases)
-2. Extract it to a path such as `C:\dev\fastdeploy`
-3. Add `C:\dev\fastdeploy\lib\cmake\FastDeploy` to `CMAKE_PREFIX_PATH` **or** set `-DFastDeploy_DIR=C:\dev\fastdeploy\lib\cmake\FastDeploy`
-4. (Optional) Point `TORIYOMI_FASTDEPLOY_RUNTIME_DIR` to the folder that contains the DLLs so CMake can copy them next to the executable
+1. Download the **Windows CPU x86_64** package from the [Paddle Inference download page](https://www.paddlepaddle.org.cn/inference/download).
+2. Extract it to a path such as `C:\Dev\paddle_inference`.
+3. Pass the following options to CMake (or set them as cache entries in the GUI):
+    - `-DTORIYOMI_PADDLE_DIR="C:/Dev/paddle_inference"`
+    - `-DTORIYOMI_PADDLE_RUNTIME_DIR="C:/Dev/paddle_inference/paddle/lib"`
+4. All DLLs inside `TORIYOMI_PADDLE_RUNTIME_DIR` will be copied next to every executable/test automatically.
 
-> ℹ️ If FastDeploy is not available, the build will automatically fall back to Tesseract-only mode. You can also explicitly disable PaddleOCR with `-DTORIYOMI_ENABLE_PADDLEOCR=OFF`.
+> ℹ️ PaddleOCR 경로는 필수입니다. 더 이상 PaddleOCR을 비활성화할 수 있는 옵션(`TORIYOMI_ENABLE_PADDLEOCR`)은 존재하지 않습니다.
 
 #### 5. Download PaddleOCR models
 
@@ -63,7 +60,7 @@ models/
         ppocr_keys_v1.txt
 ```
 
-You can grab pre-converted packages from the [FastDeploy model zoo](https://github.com/PaddlePaddle/FastDeploy/blob/develop/docs/en/build_and_install/download_fastdeploy_and_models.md) or run the official export scripts.
+You can grab pre-converted packages from the [PaddleOCR release page](https://github.com/PaddlePaddle/PaddleOCR/tree/release/2.7/deploy/cpp_infer) or run the official export scripts.
 
 ## Build
 
@@ -73,14 +70,15 @@ mkdir build
 cd build
 cmake .. `
     -DCMAKE_TOOLCHAIN_FILE=[vcpkg root]/scripts/buildsystems/vcpkg.cmake `
-    -DCMAKE_PREFIX_PATH="C:/Qt/6.10.0/msvc2022_64;C:/dev/fastdeploy" `
-    -DTORIYOMI_FASTDEPLOY_RUNTIME_DIR="C:/dev/fastdeploy/lib" `
+    -DCMAKE_PREFIX_PATH="C:/Qt/6.10.0/msvc2022_64" `
+    -DTORIYOMI_PADDLE_DIR="C:/Dev/paddle_inference" `
+    -DTORIYOMI_PADDLE_RUNTIME_DIR="C:/Dev/paddle_inference/paddle/lib" `
     -DMECAB_DLL_PATH="C:/Program Files/MeCab/bin/libmecab.dll"
 ```
 
 > ℹ️ **CMake Options**:
-> - `TORIYOMI_ENABLE_PADDLEOCR` (default: `ON`): Enable PaddleOCR engine. Automatically disabled if FastDeploy is not found.
-> - `TORIYOMI_FASTDEPLOY_RUNTIME_DIR`: Path to FastDeploy DLLs. All DLLs in this directory will be copied next to executables.
+> - `TORIYOMI_PADDLE_DIR`: Root of the Paddle Inference SDK (must contain `paddle/include`, `paddle/lib`).
+> - `TORIYOMI_PADDLE_RUNTIME_DIR`: Path to Paddle DLLs. All DLLs in this directory will be copied next to executables.
 > - `MECAB_DLL_PATH`: Path to `libmecab.dll`. Will be copied next to all executables and tests automatically.
 
 ### Compile

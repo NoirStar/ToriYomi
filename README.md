@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![C++20](https://img.shields.io/badge/C++-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
-[![CMake](https://img.shields.io/badge/CMake-3.20+-064F8C.svg)](https://cmake.org/)
+[![CMake](https://img.shields.io/badge/CMake-3.31+-064F8C.svg)](https://cmake.org/)
 
 ## 📸 스크린샷
 
@@ -21,16 +21,16 @@
 
 ToriYomi는 일본어 게임 플레이 중 **실시간으로 한자에 후리가나를 표시**하여 읽기를 돕는 학습 도구입니다. 게임 화면에 비간섭 오버레이로 후리가나를 띄우고, 추출된 문장을 데스크톱 앱에서 관리하며, 사전 검색과 Anki 카드 생성까지 지원합니다.
 
-## 🆕 최근 업데이트 (2025-11-15)
+## 🆕 최근 업데이트 (2025-11-18)
 
-- **PaddleOCR 기본화**: FastDeploy 기반 PaddleOCR 파이프라인을 기본 엔진으로 전환하고, 런타임 검출 실패 시 자동으로 Tesseract로 폴백합니다.
-- **런타임 DLL 자동 배포**: `TORIYOMI_FASTDEPLOY_RUNTIME_DIR`와 `MECAB_DLL_PATH` 옵션을 추가하여 FastDeploy/MeCab DLL을 모든 실행 파일과 테스트 옆으로 자동 복사합니다.
+- **PaddleOCR cpp_infer 내장**: FastDeploy를 제거하고 공식 PaddleOCR cpp_infer 파이프라인을 직접 프로젝트에 이식했습니다.
+- **런타임 DLL 자동 배포**: `TORIYOMI_PADDLE_RUNTIME_DIR`와 `MECAB_DLL_PATH` 옵션으로 Paddle Inference/MeCab DLL을 모든 실행 파일과 테스트 옆으로 자동 복사합니다.
 - **전체 테스트 스위트 통과**: `ctest -C Debug --output-on-failure` 기준 10개 모듈 테스트 모두 통과했습니다. `test_japanese_tokenizer`도 MeCab DLL 복사 이후 안정화되었습니다.
 
 ### ✨ 주요 기능 (계획)
 
 - 🎮 **게임 화면 실시간 캡처** (DXGI/GDI) - ✅ Phase 1 완료 (DXGI 141 FPS / GDI 44 FPS)
-- 📝 **일본어 OCR** (기본: PaddleOCR + FastDeploy, 폴백: Tesseract) - ✅ 엔진 부트스트랩 + 자동 폴백 구현
+- 📝 **일본어 OCR** (Paddle cpp_infer 전용 엔진) - ✅ 엔진 부트스트랩 및 런타임 초기화 완료
 - 🔤 **한자에만 후리가나 표시** (게임 화면 오버레이) - 🚧 렌더러 안정화 진행 중
 - 📚 **문장 저장 및 관리** (Qt QML 데스크톱 앱) - ✅ 기본 UI + 캡처/OCR 파이프라인 연동 중
 - 🔍 **로컬 사전 검색** - 📝 예정
@@ -39,6 +39,67 @@ ToriYomi는 일본어 게임 플레이 중 **실시간으로 한자에 후리가
 ### 🎯 목표
 
 일본어 게임을 통한 **몰입형 학습**을 지원합니다. 번역기가 아니라 **읽기 보조 도구**입니다.
+
+## 🧭 PaddleOCR 통합 계획
+
+> `deploy/cpp_infer/ppocr.exe`를 아래 명령으로 실행해 모델과 DLL 구성이 정상 동작함을 확인했습니다.
+> ```powershell
+> ppocr.exe ocr `
+>   --input ".\image\2.png" `
+>   --save_path ".\output" `
+>   --text_detection_model_dir ".\models\PP-OCRv5_mobile_det_infer" `
+>   --text_detection_model_name "PP-OCRv5_mobile_det" `
+>   --text_recognition_model_dir ".\models\PP-OCRv5_mobile_rec_infer" `
+>   --text_recognition_model_name "PP-OCRv5_mobile_rec" `
+>   --text_rec_input_shape "3,48,320" `
+>   --text_recognition_batch_size "1" `
+>   --use_doc_orientation_classify false `
+>   --use_doc_unwarping false `
+>   --use_textline_orientation false `
+>   --device cpu
+> ```
+
+> 🧪 **DLL 체크리스트**: 위 CLI 실행 후 생성물 검증 시 아래 DLL 다섯 개를 `deploy/cpp_infer/build/bin/Release` (또는 실행 파일 위치) 옆에 복사해야 합니다.
+> 1. `paddle_inference\paddle\lib\paddle_inference.dll`
+> 2. `paddle_inference\paddle\lib\common.dll`
+> 3. `deploy\cpp_infer\build\bin\Release\abseil_dll.dll`
+> 4. `deploy\cpp_infer\build\third_party\clipper_ver6.4.2\cpp\Release\polyclipping.dll`
+> 5. `opencv-4.7.0\build\install\x64\vc16\bin\opencv_world470.dll`
+> Paddle Inference SDK를 다른 버전으로 교체했다면 동일한 DLL을 제공하는 경로를 복사하면 됩니다.
+
+이제 같은 파이프라인을 ToriYomi의 `CaptureThread → OcrThread` 경로에 이식하여 Paddle 기반으로 실시간 후리가나 렌더링이 가능하도록 합니다.
+
+### Phase P0 – CLI 베이스라인 (✅ 완료)
+- PaddleOCR C++ 데모를 standalone으로 실행하여 모델/파라미터 세트가 정상 동작함을 검증했습니다.
+- 생성된 `output/*.json` 구조를 분석해 ToriYomi의 `Token` 및 bounding box 포맷과 매핑 방식을 정의했습니다.
+
+### Phase P1 – 런타임 패키징 (🟡 진행 예정)
+- `deploy/cpp_infer`에서 필요한 최소 소스(`ppocr_det.cc`, `ppocr_rec.cc`, config parser 등)만 벤더링하여 `src/third_party/paddle_infer` 하위에 정리합니다.
+- Paddle Inference DLL 리스트를 `TORIYOMI_PADDLE_RUNTIME_DIR`에서 자동 복사하도록 `CMakeLists.txt`를 확장합니다 (CPU 우선, GPU는 후순위).
+- 모델 디렉터리 구조(`det`, `rec`, `ppocr_keys_v1.txt`)를 `AppData/Roaming/ToriYomi/models` 기본값으로 복제하고, UI 설정에서 경로를 바꿀 수 있게 합니다.
+
+### Phase P2 – 엔진 래퍼 (🟡 진행 예정)
+- `core/ocr`에 `PaddleCppInferEngine`을 추가하여 cpp_infer의 `PaddleOCR::Pipeline::Run` 경로를 하나의 `IOcrEngine` 구현으로 감쌉니다.
+- 입력은 BGR `cv::Mat`을 그대로 받아 `cpp_infer`와 동일한 전처리(Resize + Normalize)를 수행하고, 출력은 `std::vector<TextSegment>`로 변환합니다.
+- `OcrEngineFactory/OcrEngineBootstrapper`에 Paddle 엔진만 남기고, 레거시 OCR 경로는 제거합니다.
+
+### Phase P3 – 파이프라인 통합 (🟡 진행 예정)
+- `OcrThread`가 Paddle 버전에서 batch-friendly 하도록 `FrameQueue` 소비 방식을 조정합니다 (예: 2~3프레임 샘플링, det/rec 스트림 분리).
+- `Token` 생성 시 Paddle에서 내려오는 polygon box를 `cv::RotatedRect` → axis-aligned bbox로 변환해 오버레이 스레드에 전달합니다.
+- `test_ocr_thread`, `test_overlay_thread`에 Paddle 경로 전용 통합 테스트를 추가하여 JSON 스냅샷과 문자열 비교를 자동화합니다.
+
+### Phase P4 – 전처리 & 성능 튜닝 (🟡 진행 예정)
+- 기본 정책은 **추가 전처리 없이 캡처 프레임을 그대로 사용**하고, 필요 시 ROI/밝기 조절만 옵션으로 제공합니다.
+- 글꼴 대비가 낮은 게임을 위해 선택적 `adaptive threshold`, `bilateral filter`, `gamma` 슬라이더를 UI에 노출하되, 디폴트는 비활성화하여 레이턴시를 최소화합니다.
+- CPU 경로에서 25 FPS 이상을 유지하는지 측정하고, 필요하면 `text_recognition_batch_size`를 2 이상으로 늘려 throughput을 확보합니다.
+
+#### 전처리 전략
+- PaddleOCR의 det 모델이 자체적으로 텍스트 영역을 학습하므로 **추가 이진화나 morphology는 필수 아님**. 우선 캡처 원본(BGR)만 전달해 정확도/속도를 체크합니다.
+- 다만 다음 조건 중 하나라도 만족하면 선택적 전처리를 LayeredFilter로 추가합니다:
+  1. ROI 평균 밝기 < 20 (게임이 너무 어두워 디텍션 실패 시) → `gamma`/`CLAHE` 적용
+  2. 프레임 노이즈가 크고 텍스트가 얇을 때 → `bilateralFilter` 3x3
+  3. 출력 문자가 일관되게 지워질 때 → `sharpen` 커널 `(0,-1,0;-1,5,-1;0,-1,0)` 적용
+- 위 옵션은 `toriyomi_app` 설정 패널에 체크박스로 노출하고, 기본값은 모두 OFF로 둡니다.
 
 ---
 
@@ -52,7 +113,7 @@ ToriYomi는 일본어 게임 플레이 중 **실시간으로 한자에 후리가
                         FrameQueue (스레드 안전)
                              │
                              v
-                        OcrThread (Paddle 기본 / Tesseract 폴백)
+                        OcrThread (PaddleOCR 엔진)
                              │
                              v
                          Tokenizer (한자→후리가나)
@@ -80,12 +141,11 @@ ToriYomi는 일본어 게임 플레이 중 **실시간으로 한자에 후리가
 
 - **OS**: Windows 10/11 (DirectX 11 지원)
 - **컴파일러**: MSVC 2022 (C++20)
-- **CMake**: 3.20 이상
+- **CMake**: 3.31 이상
 - **의존성**:
   - OpenCV 4.11+
-  - FastDeploy 2.3+ (PaddleOCR 기본 엔진)
+  - Paddle Inference SDK 2.6+ (cpp_infer, CPU)
   - PaddleOCR 모델 (PP-OCRv4/v5, det/cls/rec + label)
-  - Tesseract 5.5+ (폴백)
   - MeCab 0.996+ (일본어 형태소 분석)
   - Google Test 1.17+
   - Qt 6.5+ (Phase 5에서 사용 예정)
@@ -105,8 +165,6 @@ cd C:\vcpkg
 $env:TEMP="C:\Temp"; $env:TMP="C:\Temp"  # vcpkg 빌드 임시 경로 설정
 .\vcpkg install opencv:x64-windows
 .\vcpkg install gtest:x64-windows
-.\vcpkg install tesseract:x64-windows
-.\vcpkg install leptonica:x64-windows
 
 # MeCab 직접 설치 (vcpkg 사용 안 함)
 # https://github.com/ikegami-yukino/mecab/releases에서
@@ -114,32 +172,32 @@ $env:TEMP="C:\Temp"; $env:TMP="C:\Temp"  # vcpkg 빌드 임시 경로 설정
 # 설치 경로: C:\Program Files\MeCab
 ```
 
-#### 2. FastDeploy + PaddleOCR 모델 준비
+#### 2. Paddle Inference SDK + PaddleOCR 모델 준비
 
-FastDeploy는 기본적으로 PaddleOCR을 구동하기 위한 C++ 런타임을 제공합니다.
+Paddle Inference SDK(C++/CPU)와 `deploy/cpp_infer` 파이프라인을 그대로 사용합니다.
 
-1. [FastDeploy Release](https://github.com/PaddlePaddle/FastDeploy/releases)에서 **Windows CPU x64** 압축 파일을 다운로드합니다.
-2. 원하는 경로에 압축을 풉니다 (예: `C:\dev\fastdeploy`)
-3. FastDeploy의 `lib/cmake/FastDeploy` 경로를 `CMAKE_PREFIX_PATH` 또는 `FastDeploy_DIR`에 포함시키면 CMake가 자동으로 감지합니다.
-4. 런타임 DLL(`fastdeploy.dll`, `glog.dll`, `onnxruntime.dll` 등)이 들어있는 `fastdeploy/lib` 또는 `fastdeploy/third_libs/install/fastdeploy/lib` 경로를 `TORIYOMI_FASTDEPLOY_RUNTIME_DIR` 옵션으로 지정하면 빌드 산출물 옆으로 자동 복사됩니다.
-
-모델은 FastDeploy에서 제공하는 PP-OCR 시리즈를 사용합니다.
+1. [Paddle Inference Release](https://www.paddlepaddle.org.cn/inference/download)에서 **Windows CPU x64** 패키지를 내려받아 `C:\Dev\paddle_inference` 같은 위치에 압축을 풉니다.
+2. 아래 두 경로를 CMake 옵션으로 넘기거나 환경 변수로 설정합니다.
+  - `TORIYOMI_PADDLE_DIR` → `paddle_inference` 루트 (include, lib 디렉터리를 모두 포함)
+  - `TORIYOMI_PADDLE_RUNTIME_DIR` → `paddle_inference/paddle/lib` (또는 DLL이 모여 있는 폴더)
+3. `deploy/cpp_infer` 샘플처럼 모델 세트를 내려받습니다. 공식 경로에서 PP-OCRv5(or v4) `det/rec/cls` 패키지를 받아 다음 구조를 유지하세요.
 
 ```powershell
-# 예: CPU용 PP-OCRv4 일본어 세트 다운로드 (디렉터리 구조 유지)
-Invoke-WebRequest -Uri "https://bj.bcebos.com/paddlehub/fastdeploy/PP-OCRv4/en.zip" -OutFile paddleocr.zip
-Expand-Archive paddleocr.zip -DestinationPath models
-Rename-Item models/en models/paddleocr
+# 예: CPU용 PP-OCRv5 일본어 세트 다운로드 (디렉터리 구조 유지)
+Invoke-WebRequest -Uri "https://paddleocr.bj.bcebos.com/PP-OCRv5/en_ppocr_mobile_v2.6_rec_infer.zip" -OutFile rec.zip
+Invoke-WebRequest -Uri "https://paddleocr.bj.bcebos.com/PP-OCRv5/en_ppocr_mobile_v2.6_det_infer.zip" -OutFile det.zip
+Expand-Archive rec.zip -DestinationPath models\paddleocr\rec
+Expand-Archive det.zip -DestinationPath models\paddleocr\det
+Copy-Item .\ppocr_keys_v1.txt models\paddleocr\ppocr_keys_v1.txt
 
 # 필요한 파일 구조
 # models/paddleocr/
 #   det/
-#   cls/
 #   rec/
 #   ppocr_keys_v1.txt
 ```
 
-앱은 실행 파일 기준 `models/paddleocr` 경로를 기본으로 사용합니다. 다른 경로를 쓰고 싶다면 UI 설정에서 모델 경로를 변경하거나 `OcrBootstrapConfig`를 커스터마이즈 하세요.
+앱과 테스트는 실행 파일 기준 `models/paddleocr` 경로를 기본으로 참조합니다. 다른 경로를 쓰고 싶다면 UI 설정 또는 `OcrBootstrapConfig`로 커스터마이즈하세요.
 
 #### 3. 프로젝트 빌드
 
@@ -157,7 +215,9 @@ cmake .. -DCMAKE_TOOLCHAIN_FILE=[vcpkg 경로]/scripts/buildsystems/vcpkg.cmake
 cmake --build . --config Release
 ```
 
-빌드시 PaddleOCR를 끄고 싶다면 `-DTORIYOMI_ENABLE_PADDLEOCR=OFF`를 전달하세요. FastDeploy가 설치되어 있지 않으면 자동으로 Tesseract 전용 모드로 전환됩니다.
+> 예시: `cmake .. -DTORIYOMI_PADDLE_DIR="C:/Dev/paddle_inference" -DTORIYOMI_PADDLE_RUNTIME_DIR="C:/Dev/paddle_inference/paddle/lib" -DMECAB_DLL_PATH="C:/Program Files/MeCab/bin/libmecab.dll"`
+
+PaddleOCR이 유일한 OCR 경로이므로 Paddle Inference SDK + 모델 리소스가 반드시 필요합니다. `TORIYOMI_PADDLE_DIR`과 `TORIYOMI_PADDLE_RUNTIME_DIR`만 올바르게 전달되면 모든 실행 파일과 테스트 바이너리 옆으로 필요한 DLL이 자동 복사됩니다.
 
 #### 4. 테스트 실행
 
@@ -192,7 +252,7 @@ ToriYomi/
 │   │   │   └── capture_thread.h/cpp   ✅ (Phase 1-4 완료 - 3 tests, 32 FPS)
 │   │   ├── ocr/                # OCR 모듈
 │   │   │   ├── ocr_engine.h/cpp          ✅ (Phase 2-1 완료 - IOcrEngine 추상화)
-│   │   │   ├── tesseract_wrapper.h/cpp   ✅ (Phase 2-1 완료 - 10 tests, 89.5% 신뢰도)
+│   │   │   ├── paddle_ocr_wrapper.h/cpp  ✅ (Phase 2-1 완료 - Paddle cpp_infer 통합)
 │   │   │   └── ocr_thread.h/cpp          ✅ (Phase 2-2 완료 - 8 tests)
 │   │   └── tokenizer/          # 토큰화 모듈
 │   │       ├── japanese_tokenizer.h/cpp  ✅ (Phase 3-1 완료 - 11 tests, MeCab 통합)
@@ -213,7 +273,7 @@ ToriYomi/
     │   ├── test_dxgi_capture.cpp        ✅ (8 tests)
     │   ├── test_gdi_capture.cpp         ✅ (9 tests)
     │   ├── test_capture_thread.cpp      ✅ (3 tests)
-    │   ├── test_tesseract_wrapper.cpp   ✅ (10 tests)
+  │   ├── test_paddle_ocr_wrapper.cpp  ✅ (10 tests)
     │   ├── test_ocr_thread.cpp          ✅ (8 tests)
     │   └── test_japanese_tokenizer.cpp  ✅ (11 tests)
     └── integration/            # 통합 테스트
@@ -247,9 +307,9 @@ ToriYomi/
 #### ✅ Phase 2: OCR (100% 완료)
 - [x] **Phase 2-1**: OCR 엔진 추상화
   - IOcrEngine 인터페이스 설계
-  - PaddleOcrWrapper 구현 (FastDeploy + PP-OCRv4, 기본 엔진)
-  - TesseractWrapper 구현 (폴백 엔진, 10개 테스트 통과, 89.5% 신뢰도)
-  - OcrEngineBootstrapper (Paddle → Tesseract 자동 폴백)
+  - PaddleOcrWrapper 구현 (Paddle cpp_infer + PP-OCRv5, 기본 엔진)
+  - PaddleOcrWrapper 구현 (cpp_infer 파이프라인, 10개 테스트 통과)
+  - OcrEngineBootstrapper (Paddle 전용 초기화 + 오류 보고)
   - 팩토리 패턴으로 확장 가능한 설계
 - [x] **Phase 2-2**: OCR 스레드
   - FrameQueue 소비, 비동기 텍스트 인식, 8개 테스트 통과
@@ -284,8 +344,8 @@ ToriYomi/
   - 디버그 로그 패널 (타임스탬프, 실시간)
   - QTimer 폴링 방식 (100ms)
   - 캡처 → OCR → 토큰화 파이프라인
-  - PaddleOCR 기본 엔진 + Tesseract 자동 폴백
-  - FastDeploy/MeCab DLL 자동 배포 시스템
+  - PaddleOCR 전용 엔진 (cpp_infer 초기화 + 런타임 에러 처리)
+  - Paddle/MeCab DLL 자동 배포 시스템
   - **전체 테스트 통과** (10개 모듈, ctest -C Debug)
 - [ ] **Phase 5-3**: 사전 & Anki 통합 (진행 예정)
 
@@ -363,7 +423,6 @@ MIT License - 자세한 내용은 [LICENSE](LICENSE) 파일 참조
 
 ## 🙏 감사의 말
 
-- [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) - 오픈소스 OCR 엔진
 - [MeCab](https://github.com/taku910/mecab) - 일본어 형태소 분석기
 - [OpenCV](https://opencv.org/) - 컴퓨터 비전 라이브러리
 - [Qt](https://www.qt.io/) - 크로스 플랫폼 UI 프레임워크

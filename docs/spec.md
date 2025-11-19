@@ -59,7 +59,7 @@ ToriYomi는 일본어 게임 플레이 중 실시간으로 한자에 후리가�
 │                                   v                           │
 │                           ┌──────────────┐                   │
 │                           │  OcrThread   │                   │
-│                           │  (Tesseract) │                   │
+│                           │ (PaddleOCR)  │                   │
 │                           └──────┬───────┘                   │
 │                                   │                           │
 │                                   v                           │
@@ -107,8 +107,8 @@ src/
 │   │   ├── gdi_capture.h/cpp       # GDI 폴백
 │   │   └── frame_queue.h/cpp       # 스레드 안전 프레임 큐
 │   ├── ocr/
-│   │   ├── tesseract_wrapper.h/cpp # Tesseract API 래퍼
-│   │   └── text_segment.h          # OCR 결과 구조체
+│   │   ├── paddle_ocr_wrapper.h/cpp # PaddleOCR Paddle Inference 래퍼
+│   │   └── text_segment.h           # OCR 결과 구조체
 │   └── tokenizer/
 │       ├── japanese_tokenizer.h/cpp # 형태소 분석
 │       └── furigana_mapper.h/cpp    # 한자→읽기 매핑
@@ -175,8 +175,8 @@ src/
 
 ### 2. OCR 모듈
 
-#### 2.1 Tesseract 래퍼 (`tesseract_wrapper`)
-- **입력**: `cv::Mat` (그레이스케일 권장)
+#### 2.1 PaddleOCR 래퍼 (`paddle_ocr_wrapper`)
+- **입력**: `cv::Mat` (BGR, 캡처 원본 그대로)
 - **출력**: `std::vector<TextSegment>`
   ```cpp
   struct TextSegment {
@@ -186,9 +186,11 @@ src/
   };
   ```
 - **요구사항**:
-  - Tesseract 언어: `jpn` (일본어 모델)
-  - PSM 모드: `PSM_AUTO` 또는 `PSM_SPARSE_TEXT`
-  - 전처리: 이진화 (Otsu's method) 옵션 제공
+  - Paddle Inference SDK 2.6+ (CPU)
+  - PaddleOCR 모델 디렉터리: `det/`, `rec/`, `cls/`, `ppocr_keys_v1.txt`
+  - 기본 입력 크기: `text_rec_input_shape = 3x48x320`
+  - 전처리: Resize + Normalize (cpp_infer Utility 사용)
+  - 배치 크기: det=1, rec=1 (설정 가능)
 
 #### 2.2 성능 최적화
 - ROI 기반 OCR (관심 영역만 처리)
@@ -380,7 +382,7 @@ struct AnkiCard {
 | 파이프라인 단계 | 최대 허용 시간 |
 |------------------|----------------|
 | 화면 캡처 → FrameQueue | 33ms (30 FPS) |
-| OCR 처리 (Tesseract) | 150ms |
+| OCR 처리 (PaddleOCR) | 200ms |
 | 토큰화 + 매핑 | 20ms |
 | **총 레이턴시 (캡처→오버레이)** | **≤ 200ms** |
 | 오버레이 렌더링 주기 | **≤ 16ms (60 FPS)** |
@@ -414,7 +416,7 @@ struct AnkiCard {
 | 라이브러리 | 버전 | 용도 |
 |-----------|------|------|
 | **Qt 6 Widgets** | 6.5+ | 데스크톱 UI (.ui 로더) |
-| **Tesseract OCR** | 5.0+ | 일본어 OCR |
+| **Paddle Inference (PaddleOCR)** | 2.6+ | 일본어 OCR |
 | **OpenCV** | 4.8+ | 이미지 처리, 변경 감지 |
 | **spdlog** | 1.12+ | 구조화된 로깅 |
 | **nlohmann/json** | 3.11+ | JSON 파싱 (사전) |
@@ -467,7 +469,7 @@ struct AnkiCard {
 | 모듈 | 테스트 항목 |
 |------|-------------|
 | `FrameQueue` | Push/Pop 동기화, 오버플로우 처리 |
-| `TesseractWrapper` | 일본어 텍스트 추출 정확도 |
+| `PaddleOcrWrapper` | 일본어 텍스트 추출 정확도 |
 | `JapaneseTokenizer` | 한자/히라가나 분리 |
 | `Dictionary` | JSON 로드, 단어 검색 |
 | `AnkiConnectClient` | HTTP 요청 생성 (Mock) |
@@ -486,7 +488,7 @@ struct AnkiCard {
 - **벤치마크 도구**: Google Benchmark
 - **측정 대상**:
   - DXGI 캡처 FPS
-  - Tesseract OCR 처리 시간
+  - PaddleOCR 처리 시간 (det/cls/rec 파이프라인)
   - 프레임 변경 감지 시간
 
 ---
@@ -506,7 +508,7 @@ struct AnkiCard {
 - **언어 지원**: 한자→읽기 매퍼를 중국어로 확장 가능
 
 ### 배포
-- **패키징**: Tesseract 모델 파일 (`jpn.traineddata`) 포함
+- **패키징**: PaddleOCR 모델 디렉터리 (det/cls/rec + `ppocr_keys_v1.txt`) 포함
 - **의존성**: Qt, OpenCV는 정적 링크 또는 installer에 포함
 
 ---
@@ -516,7 +518,7 @@ struct AnkiCard {
 ### Phase 1: Core Pipeline (1-2주)
 1. ✅ DXGI 화면 캡처
 2. ✅ FrameQueue 구현
-3. ✅ Tesseract OCR 통합
+3. ✅ PaddleOCR 통합
 4. ✅ 기본 오버레이 창 (텍스트 표시만)
 
 ### Phase 2: Furigana & Tokenization (1-2주)
@@ -543,7 +545,7 @@ struct AnkiCard {
 ## 참고 문서
 - [Code Style Guide](./code-style.md)
 - [Qt Designer Manual](https://doc.qt.io/qt-6/qtdesigner-manual.html)
-- [Tesseract API Documentation](https://tesseract-ocr.github.io/tessapi/5.x/)
+- [Paddle Inference Guide](https://www.paddlepaddle.org.cn/inference/product)
 - [AnkiConnect API](https://git.foosoft.net/alex/anki-connect)
 
 ---

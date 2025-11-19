@@ -3,23 +3,19 @@
 
 #include "ocr_engine.h"
 #include "paddle_ocr_wrapper.h"
-#include "tesseract_wrapper.h"
 
 namespace toriyomi {
 namespace ocr {
 
 std::unique_ptr<IOcrEngine> OcrEngineFactory::CreateEngine(OcrEngineType type) {
     switch (type) {
-        case OcrEngineType::Tesseract:
-            return std::make_unique<TesseractWrapper>();
-        
         case OcrEngineType::PaddleOCR:
             return std::make_unique<PaddleOcrWrapper>();
-        
+
         case OcrEngineType::EasyOCR:
             // TODO: EasyOCR 구현 시 추가
             return nullptr;
-        
+
         default:
             return nullptr;
     }

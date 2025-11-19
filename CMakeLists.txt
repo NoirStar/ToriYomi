@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.31)
 project(ToriYomi VERSION 0.1.0 LANGUAGES CXX)
 
 # C++20 standard
@@ -11,6 +11,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 if(MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
     message(STATUS "MSVC Runtime Library: MultiThreaded$<$<CONFIG:Debug>:Debug>DLL (/MD or /MDd)")
+	add_compile_options(/utf-8)
 endif()
 
 # Output directories
@@ -21,8 +22,6 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # Find packages
 find_package(OpenCV REQUIRED)
 find_package(GTest REQUIRED)
-find_package(Tesseract REQUIRED)
-find_package(Leptonica REQUIRED)
 find_package(mecab CONFIG REQUIRED)
 find_package(Qt6 REQUIRED COMPONENTS Quick Qml Widgets UiTools)
 
@@ -53,6 +52,22 @@ function(toriyomi_copy_mecab_dll target)
 		VERBATIM)
 endfunction()
 
+
+function(toriyomi_copy_paddle_dlls target)
+	if (NOT TORIYOMI_PADDLE_DLLS)
+		return()
+	endif()
+
+	foreach(paddle_dll ${TORIYOMI_PADDLE_DLLS})
+		add_custom_command(TARGET ${target} POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different
+				"${paddle_dll}"
+				"$<TARGET_FILE_DIR:${target}>"
+			COMMENT "Copying Paddle runtime DLL ${paddle_dll} for target ${target}"
+			VERBATIM)
+	endforeach()
+endfunction()
+
 find_package(spdlog CONFIG QUIET)
 if (NOT spdlog_FOUND)
 	message(STATUS "spdlog not found via package manager - fetching header-only dependency")
@@ -66,32 +81,92 @@ if (NOT spdlog_FOUND)
 	FetchContent_MakeAvailable(spdlog)
 endif()
 
-option(TORIYOMI_ENABLE_PADDLEOCR "Enable PaddleOCR backend via FastDeploy" ON)
-set(TORIYOMI_FASTDEPLOY_RUNTIME_DIR "" CACHE PATH "Directory containing FastDeploy runtime DLLs to copy next to the app")
+set(TORIYOMI_PADDLE_DIR "" CACHE PATH "Root directory of the Paddle Inference installation (must contain paddle/include and paddle/lib)")
+set(TORIYOMI_PADDLE_RUNTIME_DIR "" CACHE PATH "Directory containing Paddle runtime DLLs to copy next to the app")
 
-if (TORIYOMI_ENABLE_PADDLEOCR)
-	find_package(FastDeploy CONFIG QUIET)
-	if (NOT FastDeploy_FOUND)
-		message(WARNING "FastDeploy package not found; disabling PaddleOCR build. Install FastDeploy and rerun CMake or set -DTORIYOMI_ENABLE_PADDLEOCR=OFF explicitly.")
-		set(TORIYOMI_ENABLE_PADDLEOCR OFF CACHE BOOL "Enable PaddleOCR backend via FastDeploy" FORCE)
-	endif()
+if (NOT TORIYOMI_PADDLE_DIR)
+	message(FATAL_ERROR "TORIYOMI_PADDLE_DIR must be set. Point it to the Paddle Inference SDK root (contains paddle/include and paddle/lib directories).")
 endif()
 
-set(TORIYOMI_FASTDEPLOY_DLLS)
-if (TORIYOMI_ENABLE_PADDLEOCR AND TORIYOMI_FASTDEPLOY_RUNTIME_DIR)
-	file(GLOB TORIYOMI_FASTDEPLOY_DLLS
-		"${TORIYOMI_FASTDEPLOY_RUNTIME_DIR}/*.dll")
-	if (NOT TORIYOMI_FASTDEPLOY_DLLS)
-		message(WARNING "TORIYOMI_FASTDEPLOY_RUNTIME_DIR is set but no DLLs were found: ${TORIYOMI_FASTDEPLOY_RUNTIME_DIR}")
+set(PADDLE_INCLUDE_DIR "${TORIYOMI_PADDLE_DIR}/paddle/include")
+set(PADDLE_LIB_DIR "${TORIYOMI_PADDLE_DIR}/paddle/lib")
+if (NOT TORIYOMI_PADDLE_RUNTIME_DIR)
+	set(TORIYOMI_PADDLE_RUNTIME_DIR "${PADDLE_LIB_DIR}" CACHE PATH "Directory containing Paddle runtime DLLs to copy next to the app" FORCE)
+endif()
+
+set(PADDLE_RUNTIME_DIRS ${TORIYOMI_PADDLE_RUNTIME_DIR})
+set(PADDLE_THIRD_PARTY_INSTALL_DIR "${TORIYOMI_PADDLE_DIR}/paddle/third_party/install")
+if (EXISTS "${PADDLE_THIRD_PARTY_INSTALL_DIR}")
+	file(GLOB PADDLE_THIRD_PARTY_COMPONENT_DIRS LIST_DIRECTORIES TRUE "${PADDLE_THIRD_PARTY_INSTALL_DIR}/*")
+	foreach(component_dir ${PADDLE_THIRD_PARTY_COMPONENT_DIRS})
+		foreach(subdir lib bin)
+			if (EXISTS "${component_dir}/${subdir}")
+				list(APPEND PADDLE_RUNTIME_DIRS "${component_dir}/${subdir}")
+			endif()
+		endforeach()
+	endforeach()
+endif()
+
+find_library(PADDLE_INFERENCE_LIB
+	NAMES paddle_inference
+	PATHS ${PADDLE_LIB_DIR}
+	NO_DEFAULT_PATH)
+if (NOT PADDLE_INFERENCE_LIB)
+	message(FATAL_ERROR "Unable to find paddle_inference library under ${PADDLE_LIB_DIR}")
+endif()
+
+find_package(yaml-cpp CONFIG REQUIRED)
+
+find_package(absl CONFIG REQUIRED)
+
+set(PADDLEOCR_THIRD_PARTY_DIR ${CMAKE_SOURCE_DIR}/third_party/paddleocr/third_party)
+
+add_subdirectory(${PADDLEOCR_THIRD_PARTY_DIR}/clipper_ver6.4.2/cpp)
+
+set(TORIYOMI_PADDLE_DLLS)
+foreach(runtime_dir ${PADDLE_RUNTIME_DIRS})
+	if (EXISTS "${runtime_dir}")
+		file(GLOB _paddle_dir_dlls CONFIGURE_DEPENDS "${runtime_dir}/*.dll")
+		list(APPEND TORIYOMI_PADDLE_DLLS ${_paddle_dir_dlls})
 	endif()
+endforeach()
+list(REMOVE_DUPLICATES TORIYOMI_PADDLE_DLLS)
+if (NOT TORIYOMI_PADDLE_DLLS)
+	message(WARNING "Unable to locate Paddle runtime DLLs. Checked directories: ${PADDLE_RUNTIME_DIRS}")
 endif()
 
 # Include directories
 include_directories(
 	${CMAKE_SOURCE_DIR}/src
+	${CMAKE_SOURCE_DIR}/third_party
 	${OpenCV_INCLUDE_DIRS}
 	C:/vcpkg/installed/x64-windows/include
 )
+
+set(PADDLEOCR_SRC_DIR ${CMAKE_SOURCE_DIR}/third_party/paddleocr/src)
+file(GLOB_RECURSE PADDLEOCR_SOURCES CONFIGURE_DEPENDS
+	${PADDLEOCR_SRC_DIR}/*.cc)
+list(FILTER PADDLEOCR_SOURCES EXCLUDE REGEX "src/utils/args.cc$")
+
+add_library(toriyomi_paddleocr STATIC ${PADDLEOCR_SOURCES})
+target_include_directories(toriyomi_paddleocr
+	PUBLIC
+		${CMAKE_SOURCE_DIR}/third_party/paddleocr
+		${CMAKE_SOURCE_DIR}/third_party/paddleocr/src
+		${CMAKE_SOURCE_DIR}/third_party/paddleocr/third_party/nlohmann
+		${PADDLEOCR_THIRD_PARTY_DIR}/clipper_ver6.4.2/cpp
+		${PADDLEOCR_THIRD_PARTY_DIR}/polyclipping
+		${PADDLEOCR_THIRD_PARTY_DIR}
+		${PADDLE_INCLUDE_DIR}
+)
+target_link_libraries(toriyomi_paddleocr
+	PUBLIC
+		${PADDLE_INFERENCE_LIB}
+		yaml-cpp::yaml-cpp
+		absl::statusor
+		polyclipping
+)
+target_compile_options(toriyomi_paddleocr PRIVATE /bigobj)
 
 # Core library - Capture module
 add_library(toriyomi_capture
@@ -114,7 +189,6 @@ target_include_directories(toriyomi_capture PUBLIC
 # Core library - OCR module
 add_library(toriyomi_ocr
 	src/core/ocr/ocr_engine.cpp
-	src/core/ocr/tesseract_wrapper.cpp
 	src/core/ocr/paddle_ocr_wrapper.cpp
 	src/core/ocr/ocr_engine_bootstrapper.cpp
 	src/core/ocr/ocr_thread.cpp
@@ -123,21 +197,23 @@ add_library(toriyomi_ocr
 target_link_libraries(toriyomi_ocr
 	toriyomi_capture
 	${OpenCV_LIBS}
-	debug C:/vcpkg/installed/x64-windows/debug/lib/tesseract55d.lib
-	optimized C:/vcpkg/installed/x64-windows/lib/tesseract55.lib
-	debug C:/vcpkg/installed/x64-windows/debug/lib/leptonica-1.85.0d.lib
-	optimized C:/vcpkg/installed/x64-windows/lib/leptonica-1.85.0.lib
 	spdlog::spdlog_header_only
+	toriyomi_paddleocr
 )
-
-if (TORIYOMI_ENABLE_PADDLEOCR)
-	target_link_libraries(toriyomi_ocr FastDeploy::fastdeploy)
-	target_compile_definitions(toriyomi_ocr PUBLIC TORIYOMI_ENABLE_PADDLEOCR)
-endif()
 
 target_include_directories(toriyomi_ocr PUBLIC
 	${CMAKE_SOURCE_DIR}/src
+	${CMAKE_SOURCE_DIR}/third_party/paddleocr
+	${CMAKE_SOURCE_DIR}/third_party/paddleocr/src
+	${CMAKE_SOURCE_DIR}/third_party/paddleocr/third_party/nlohmann
+	${PADDLEOCR_THIRD_PARTY_DIR}/clipper_ver6.4.2/cpp
+	${PADDLEOCR_THIRD_PARTY_DIR}/polyclipping
+	${PADDLEOCR_THIRD_PARTY_DIR}
+	${PADDLE_INCLUDE_DIR}
 )
+
+# UTF-8 인코딩 설정 (한글/일본어 소스 경고 방지)
+target_compile_options(toriyomi_ocr PRIVATE /utf-8)
 
 # Core library - Tokenizer module
 add_library(toriyomi_tokenizer
@@ -215,6 +291,7 @@ qt_add_executable(ToriYomiApp
 	src/qml/ToriYomiApp/ToriYomiApp.qrc
 )
 toriyomi_copy_mecab_dll(ToriYomiApp)
+toriyomi_copy_paddle_dlls(ToriYomiApp)
 
 target_link_libraries(ToriYomiApp PRIVATE
 	toriyomi_qml_backend
@@ -248,6 +325,7 @@ add_executable(test_frame_queue
 	tests/unit/test_frame_queue.cpp
 )
 toriyomi_copy_mecab_dll(test_frame_queue)
+toriyomi_copy_paddle_dlls(test_frame_queue)
 
 target_link_libraries(test_frame_queue
 	toriyomi_capture
@@ -260,6 +338,7 @@ add_executable(test_dxgi_capture
 	tests/unit/test_dxgi_capture.cpp
 )
 toriyomi_copy_mecab_dll(test_dxgi_capture)
+toriyomi_copy_paddle_dlls(test_dxgi_capture)
 
 target_link_libraries(test_dxgi_capture
 	toriyomi_capture
@@ -272,6 +351,7 @@ add_executable(test_gdi_capture
 	tests/unit/test_gdi_capture.cpp
 )
 toriyomi_copy_mecab_dll(test_gdi_capture)
+toriyomi_copy_paddle_dlls(test_gdi_capture)
 
 target_link_libraries(test_gdi_capture
 	toriyomi_capture
@@ -284,6 +364,7 @@ add_executable(test_capture_thread
 	tests/unit/test_capture_thread.cpp
 )
 toriyomi_copy_mecab_dll(test_capture_thread)
+toriyomi_copy_paddle_dlls(test_capture_thread)
 
 target_link_libraries(test_capture_thread
 	toriyomi_capture
@@ -324,31 +405,33 @@ set_target_properties(test_capture_thread PROPERTIES
 )
 
 # OCR tests
-add_executable(test_tesseract_wrapper
-	tests/unit/test_tesseract_wrapper.cpp
+add_executable(test_paddle_ocr_wrapper
+	tests/unit/test_paddle_ocr_wrapper.cpp
 )
-toriyomi_copy_mecab_dll(test_tesseract_wrapper)
+toriyomi_copy_mecab_dll(test_paddle_ocr_wrapper)
+toriyomi_copy_paddle_dlls(test_paddle_ocr_wrapper)
 
-target_link_libraries(test_tesseract_wrapper
+target_link_libraries(test_paddle_ocr_wrapper
 	toriyomi_ocr
 	GTest::gtest
 	GTest::gtest_main
 	${OpenCV_LIBS}
 )
 
-set_target_properties(test_tesseract_wrapper PROPERTIES
+set_target_properties(test_paddle_ocr_wrapper PROPERTIES
 	RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
 	AUTOMOC OFF
 	AUTOUIC OFF
 )
 
-add_test(NAME TesseractWrapperTest COMMAND test_tesseract_wrapper)
+add_test(NAME PaddleOcrWrapperTest COMMAND test_paddle_ocr_wrapper)
 
 # OCR Thread tests
 add_executable(test_ocr_thread
 	tests/unit/test_ocr_thread.cpp
 )
 toriyomi_copy_mecab_dll(test_ocr_thread)
+toriyomi_copy_paddle_dlls(test_ocr_thread)
 
 target_link_libraries(test_ocr_thread
 	toriyomi_ocr
@@ -369,6 +452,7 @@ add_executable(test_ocr_engine_bootstrapper
 	tests/unit/test_ocr_engine_bootstrapper.cpp
 )
 toriyomi_copy_mecab_dll(test_ocr_engine_bootstrapper)
+toriyomi_copy_paddle_dlls(test_ocr_engine_bootstrapper)
 
 target_link_libraries(test_ocr_engine_bootstrapper
 	toriyomi_ocr
@@ -390,6 +474,7 @@ add_executable(test_japanese_tokenizer
 	tests/unit/test_japanese_tokenizer.cpp
 )
 toriyomi_copy_mecab_dll(test_japanese_tokenizer)
+toriyomi_copy_paddle_dlls(test_japanese_tokenizer)
 
 target_link_libraries(test_japanese_tokenizer
 	toriyomi_tokenizer
@@ -489,43 +574,6 @@ add_test(NAME OverlayThreadTest COMMAND test_overlay_thread)
 # DLL 자동 복사 규칙 (Debug/Release 분리)
 # ============================================================================
 
-# vcpkg DLL 경로 설정
+# vcpkg DLL 경로 설정 (참고용 상수)
 set(VCPKG_BIN_DEBUG "C:/vcpkg/installed/x64-windows/debug/bin")
 set(VCPKG_BIN_RELEASE "C:/vcpkg/installed/x64-windows/bin")
-
-# Debug 빌드: Debug DLL만 복사
-add_custom_command(TARGET ToriYomiApp POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E echo "Copying Debug DLLs..."
-    # Tesseract Debug
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${VCPKG_BIN_DEBUG}/tesseract55d.dll"
-        "$<TARGET_FILE_DIR:ToriYomiApp>"
-    # Leptonica Debug
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${VCPKG_BIN_DEBUG}/leptonica-1.85.0d.dll"
-        "$<TARGET_FILE_DIR:ToriYomiApp>"
-    # Release DLL 제거 (혼재 방지)
-    COMMAND ${CMAKE_COMMAND} -E remove -f
-        "$<TARGET_FILE_DIR:ToriYomiApp>/tesseract55.dll"
-    COMMAND ${CMAKE_COMMAND} -E remove -f
-        "$<TARGET_FILE_DIR:ToriYomiApp>/leptonica-1.85.0.dll"
-    COMMAND ${CMAKE_COMMAND} -E remove -f
-        "$<TARGET_FILE_DIR:ToriYomiApp>/opencv_core4.dll"
-    COMMAND ${CMAKE_COMMAND} -E remove -f
-        "$<TARGET_FILE_DIR:ToriYomiApp>/opencv_imgproc4.dll"
-    COMMENT "Ensuring Debug-only DLLs in output directory"
-    VERBATIM
-)
-
-if (TORIYOMI_ENABLE_PADDLEOCR AND TORIYOMI_FASTDEPLOY_DLLS)
-	foreach(fd_dll ${TORIYOMI_FASTDEPLOY_DLLS})
-		add_custom_command(TARGET ToriYomiApp POST_BUILD
-			COMMAND ${CMAKE_COMMAND} -E copy_if_different
-				"${fd_dll}"
-				"$<TARGET_FILE_DIR:ToriYomiApp>"
-			COMMENT "Copy FastDeploy runtime DLL: ${fd_dll}"
-			VERBATIM)
-	endforeach()
-elseif (TORIYOMI_ENABLE_PADDLEOCR AND NOT TORIYOMI_FASTDEPLOY_RUNTIME_DIR)
-	message(STATUS "Set TORIYOMI_FASTDEPLOY_RUNTIME_DIR to copy FastDeploy DLLs automatically, or add the FastDeploy bin directory to PATH.")
-endif()

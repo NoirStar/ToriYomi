@@ -15,8 +15,8 @@
 ### Phase 2: OCR (100% 완료) ✅
 - **Phase 2-1**: OCR 엔진 추상화 및 구현
   - IOcrEngine 인터페이스 설계
-  - PaddleOcrWrapper 구현 (FastDeploy + PP-OCRv4, 기본 엔진)
-  - TesseractWrapper 구현 (폴백 엔진, 10개 테스트 통과, 89.5% 신뢰도)
+  - PaddleOcrWrapper 구현 (Paddle cpp_infer + PP-OCRv5, 기본 엔진)
+  - PaddleOcrWrapper 구현 (cpp_infer 엔진, 10개 테스트 통과)
   - OcrEngineBootstrapper (자동 폴백 로직, 1개 테스트 통과)
 - **Phase 2-2**: OCR Thread (비동기 처리, 8개 테스트 통과)
 
@@ -48,8 +48,8 @@
   - ✅ OnPollOcrResults QTimer 폴링 (100ms)
   - ✅ 캡처 → OCR → 토큰화 파이프라인 구조
   - ✅ 테스트 AUTOMOC/AUTOUIC 비활성화 (빌드 속도 개선)
-  - ✅ PaddleOCR 기본 엔진 적용 + Tesseract 자동 폴백
-  - ✅ FastDeploy/MeCab DLL 자동 배포 (`TORIYOMI_FASTDEPLOY_RUNTIME_DIR`, `MECAB_DLL_PATH`)
+  - ✅ PaddleOCR 전용 엔진 적용 (cpp_infer 초기화 + 오류 처리)
+  - ✅ Paddle/MeCab DLL 자동 배포 (`TORIYOMI_PADDLE_RUNTIME_DIR`, `MECAB_DLL_PATH`)
   - ✅ 전체 테스트 스위트 통과 (10개 모듈, ctest -C Debug)
   
 - **Phase 5-3**: 사전 & Anki 통합 (진행 예정)
@@ -243,8 +243,8 @@ bool HasFrameChanged(const cv::Mat& frame);
 
 ## 📋 대기 중
 
-### Phase 2-1: Tesseract 래퍼 구현 (다음 작업)
-- Tesseract OCR API 래핑
+### Phase 2-1: PaddleOCR 래퍼 구현 (완료)
+- Paddle cpp_infer API 래핑
 - 일본어 모델 (jpn) 사용
 - TextSegment 구조체 출력
 

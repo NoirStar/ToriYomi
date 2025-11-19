@@ -10,11 +10,9 @@ namespace toriyomi {
 namespace ocr {
 
 /**
- * @brief PaddleOCR 백엔드 래퍼
- *
- * FastDeploy 기반 PaddleOCR 추론을 IOcrEngine 인터페이스로 감싼 구현체입니다.
- * TORIYOMI_ENABLE_PADDLEOCR 매크로가 비활성화된 경우에도 안전하게 동작하도록
- * 런타임 의존성을 느슨하게 유지합니다.
+ * @brief PaddleOCR cpp_infer 백엔드를 IOcrEngine 인터페이스로 감싼 구현체입니다.
+ *        프로젝트가 항상 Paddle Inference SDK를 링크하므로 조건부 빌드는 더 이상
+ *        사용하지 않습니다.
  */
 class PaddleOcrWrapper : public IOcrEngine {
 public:
@@ -42,10 +40,8 @@ private:
     std::string language_ = "jpn";
     std::string lastError_;
 
-#ifdef TORIYOMI_ENABLE_PADDLEOCR
     class Runtime;
     std::unique_ptr<Runtime> runtime_;
-#endif
 };
 
 }  // namespace ocr

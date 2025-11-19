@@ -3,60 +3,150 @@
 #include <opencv2/imgproc.hpp>
 #include <spdlog/spdlog.h>
 #include <algorithm>
-#include <limits>
+#include <cctype>
+#include <filesystem>
 #include <thread>
 
-#ifdef TORIYOMI_ENABLE_PADDLEOCR
-#include <fastdeploy/vision.h>
-#endif
+#include "paddleocr/src/pipelines/ocr/pipeline.h"
+#include "paddleocr/src/utils/utility.h"
 
 namespace toriyomi {
 namespace ocr {
 
 namespace {
 constexpr float kDefaultConfidenceScale = 100.0f;
+void ClampRect(cv::Rect& rect, const cv::Size& bounds);
+namespace fs = std::filesystem;
+
+std::string NormalizeLanguageCode(const std::string& language) {
+    std::string lowered;
+    lowered.reserve(language.size());
+    for (char ch : language) {
+        lowered.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+    }
+
+    if (lowered == "ja" || lowered == "jp" || lowered == "japanese") {
+        return "japan";
+    }
+    if (lowered == "ko" || lowered == "kr" || lowered == "korean") {
+        return "korean";
+    }
+    if (lowered == "en" || lowered == "eng" || lowered == "english") {
+        return "en";
+    }
+    if (lowered == "zh-tw" || lowered == "zh_tw" || lowered == "traditional" ||
+        lowered == "cht" || lowered == "chinese_cht") {
+        return "chinese_cht";
+    }
+    if (lowered == "zh" || lowered == "zh-cn" || lowered == "ch" ||
+        lowered == "chinese" || lowered == "simplified") {
+        return "ch";
+    }
+    if (lowered == "ru" || lowered == "rus" || lowered == "russian") {
+        return "ru";
+    }
+    return lowered.empty() ? std::string("ch") : lowered;
 }
 
-#ifdef TORIYOMI_ENABLE_PADDLEOCR
+std::string BuildModelDir(const fs::path& root, const std::string& name) {
+    return (root / name).string();
+}
+}
+
 class PaddleOcrWrapper::Runtime {
 public:
     Runtime() = default;
     ~Runtime() = default;
 
-    bool Initialize(const std::string& modelDir, const std::string& language) {
-        const std::string detModelDir = modelDir + "/det";
-        const std::string recModelDir = modelDir + "/rec";
-        const std::string clsModelDir = modelDir + "/cls";
-        const std::string labelPath = modelDir + "/ppocr_keys_v1.txt";
-
-        fastdeploy::RuntimeOption option;
-        option.UseCpu();
-        option.SetCpuThreadNum(std::max(2u, std::thread::hardware_concurrency()));
-
-        try {
-            pipeline_ = std::make_unique<fastdeploy::vision::ocr::PPOCRv4>(
-                detModelDir, recModelDir, clsModelDir, labelPath, option);
-        } catch (const std::exception& ex) {
-            SPDLOG_ERROR("PaddleOCR 초기화 실패: {}", ex.what());
-            pipeline_.reset();
-            return false;
-        }
-
-        SPDLOG_INFO("PaddleOCR 모델 초기화 완료 (언어: {})", language);
-        return pipeline_ != nullptr;
-    }
-
-    bool Predict(const cv::Mat& image, fastdeploy::vision::OCRResult& result) {
-        if (!pipeline_) {
-            return false;
-        }
-        return pipeline_->Predict(image, &result);
-    }
+    bool Initialize(const std::string& modelDir, const std::string& language);
+    bool Predict(const cv::Mat& image, std::vector<TextSegment>& segments);
 
 private:
-    std::unique_ptr<fastdeploy::vision::ocr::PPOCRv4> pipeline_;
+    std::unique_ptr<_OCRPipeline> pipeline_;
 };
-#endif
+
+bool PaddleOcrWrapper::Runtime::Initialize(const std::string& modelDir, const std::string& language) {
+    fs::path root = fs::u8path(modelDir);
+    const std::string detModelDir = BuildModelDir(root, "det");
+    const std::string recModelDir = BuildModelDir(root, "rec");
+
+    if (!fs::exists(detModelDir)) {
+        SPDLOG_ERROR("PaddleOCR det 모델 디렉터리를 찾을 수 없습니다: {}", detModelDir);
+        return false;
+    }
+    if (!fs::exists(recModelDir)) {
+        SPDLOG_ERROR("PaddleOCR rec 모델 디렉터리를 찾을 수 없습니다: {}", recModelDir);
+        return false;
+    }
+
+    OCRPipelineParams params;
+    params.text_detection_model_dir = detModelDir;
+    params.text_recognition_model_dir = recModelDir;
+    params.use_doc_orientation_classify = false;
+    params.use_doc_unwarping = false;
+    params.use_textline_orientation = false;
+    params.text_recognition_batch_size = 1;
+    params.lang = NormalizeLanguageCode(language);
+    params.device = "cpu";
+    params.enable_mkldnn = Utility::IsMkldnnAvailable();
+    params.cpu_threads = static_cast<int>(std::max(2u, std::thread::hardware_concurrency()));
+    params.thread_num = 1;
+
+    try {
+        pipeline_ = std::make_unique<_OCRPipeline>(params);
+    } catch (const std::exception& ex) {
+        SPDLOG_ERROR("PaddleOCR 파이프라인 초기화 실패: {}", ex.what());
+        pipeline_.reset();
+        return false;
+    }
+
+    SPDLOG_INFO("PaddleOCR cpp_infer 파이프라인 초기화 완료 (언어: {})", params.lang.value_or("ch"));
+    return static_cast<bool>(pipeline_);
+}
+
+bool PaddleOcrWrapper::Runtime::Predict(const cv::Mat& image, std::vector<TextSegment>& segments) {
+    if (!pipeline_) {
+        return false;
+    }
+    std::vector<cv::Mat> inputs = {image};
+    (void)pipeline_->Predict(inputs);
+    const auto pipeline_results = pipeline_->PipelineResult();
+    segments.clear();
+    if (pipeline_results.empty()) {
+        return true;
+    }
+    const auto& result = pipeline_results.front();
+    const size_t count = result.rec_texts.size();
+    segments.reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+        TextSegment segment;
+        segment.text = result.rec_texts[i];
+        if (i < result.rec_scores.size()) {
+            segment.confidence = result.rec_scores[i] * kDefaultConfidenceScale;
+        } else {
+            segment.confidence = 0.0f;
+        }
+
+        cv::Rect bbox;
+        if (i < result.rec_polys.size() && !result.rec_polys[i].empty()) {
+            bbox = cv::boundingRect(result.rec_polys[i]);
+        } else if (i < result.rec_boxes.size()) {
+            const auto& box = result.rec_boxes[i];
+            const int left = static_cast<int>(box[0]);
+            const int top = static_cast<int>(box[1]);
+            const int right = static_cast<int>(box[2]);
+            const int bottom = static_cast<int>(box[3]);
+            bbox = cv::Rect(left, top, std::max(1, right - left), std::max(1, bottom - top));
+        }
+        if (bbox.width > 0 && bbox.height > 0) {
+            ClampRect(bbox, image.size());
+            segment.boundingBox = bbox;
+        }
+
+        segments.push_back(std::move(segment));
+    }
+    return true;
+}
 
 namespace {
 
@@ -95,7 +185,6 @@ bool PaddleOcrWrapper::Initialize(const std::string& modelDir, const std::string
         return false;
     }
 
-#ifdef TORIYOMI_ENABLE_PADDLEOCR
     runtime_ = std::make_unique<Runtime>();
     if (!runtime_->Initialize(modelDirectory_, language_)) {
         runtime_.reset();
@@ -107,12 +196,6 @@ bool PaddleOcrWrapper::Initialize(const std::string& modelDir, const std::string
     initialized_ = true;
     lastError_.clear();
     return true;
-#else
-    lastError_ = "PaddleOCR 지원이 비활성화되어 있습니다. CMake 옵션 TORIYOMI_ENABLE_PADDLEOCR를 켜세요.";
-    SPDLOG_WARN("{}", lastError_);
-    initialized_ = false;
-    return false;
-#endif
 }
 
 std::vector<TextSegment> PaddleOcrWrapper::RecognizeText(const cv::Mat& image) {
@@ -151,66 +234,21 @@ std::string PaddleOcrWrapper::GetLastError() const {
 std::vector<TextSegment> PaddleOcrWrapper::RunInference(const cv::Mat& image) {
     std::vector<TextSegment> segments;
 
-#ifndef TORIYOMI_ENABLE_PADDLEOCR
-    (void)image;
-    return segments;
-#else
     if (!runtime_) {
         lastError_ = "PaddleOCR 런타임이 준비되지 않았습니다";
         return segments;
     }
 
-    fastdeploy::vision::OCRResult fdResult;
-    if (!runtime_->Predict(image, fdResult)) {
+    if (!runtime_->Predict(image, segments)) {
         lastError_ = "PaddleOCR 추론 호출 실패";
+        segments.clear();
         return segments;
     }
-
-    const size_t textCount = fdResult.text.size();
-    segments.reserve(textCount);
-
-    for (size_t idx = 0; idx < textCount; ++idx) {
-        TextSegment segment;
-        segment.text = fdResult.text[idx];
-        if (idx < fdResult.score.size()) {
-            segment.confidence = fdResult.score[idx] * kDefaultConfidenceScale;
-        } else {
-            segment.confidence = 0.0f;
-        }
-
-        if (idx < fdResult.boxes.size()) {
-            const auto& box = fdResult.boxes[idx];
-            if (box.size() >= 8) {
-                float minX = std::numeric_limits<float>::max();
-                float minY = std::numeric_limits<float>::max();
-                float maxX = std::numeric_limits<float>::lowest();
-                float maxY = std::numeric_limits<float>::lowest();
-
-                for (size_t i = 0; i + 1 < box.size(); i += 2) {
-                    minX = std::min(minX, box[i]);
-                    minY = std::min(minY, box[i + 1]);
-                    maxX = std::max(maxX, box[i]);
-                    maxY = std::max(maxY, box[i + 1]);
-                }
-
-                const int width = static_cast<int>(std::max(1.0f, maxX - minX));
-                const int height = static_cast<int>(std::max(1.0f, maxY - minY));
-                segment.boundingBox = cv::Rect(static_cast<int>(minX), static_cast<int>(minY), width, height);
-                ClampRect(segment.boundingBox, image.size());
-            }
-        }
-
-        segments.push_back(std::move(segment));
-    }
-
     return segments;
-#endif
 }
 
 void PaddleOcrWrapper::ResetRuntimeLocked() {
-#ifdef TORIYOMI_ENABLE_PADDLEOCR
     runtime_.reset();
-#endif
     initialized_ = false;
     lastError_.clear();
 }

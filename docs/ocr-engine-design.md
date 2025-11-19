@@ -8,19 +8,18 @@ ToriYomi는 OCR 엔진을 쉽게 교체할 수 있도록 추상 인터페이스�
 
 ```
 IOcrEngine (추상 인터페이스)
-    ├── PaddleOcrWrapper (FastDeploy, 기본값)
-    ├── TesseractWrapper (폴백)
-    └── EasyOcrWrapper (미래 구현)
+    ├── PaddleOcrWrapper (Paddle cpp_infer, 기본값)
+    └── FutureOcrWrapper (확장 슬롯)
 ```
 
 ## 📝 사용 방법
 
 ### 방법 1: 직접 생성
 ```cpp
-#include "core/ocr/tesseract_wrapper.h"
+#include "core/ocr/paddle_ocr_wrapper.h"
 
-auto ocr = std::make_unique<TesseractWrapper>();
-ocr->Initialize("C:/path/to/tessdata", "jpn");
+auto ocr = std::make_unique<PaddleOcrWrapper>();
+ocr->Initialize("C:/path/to/paddle/models", "jpn");
 
 cv::Mat frame = /* 캡처된 프레임 */;
 auto results = ocr->RecognizeText(frame);
@@ -39,10 +38,10 @@ ocr->Shutdown();
 #include "core/ocr/ocr_engine.h"
 
 // 런타임에 엔진 선택
-auto ocr = OcrEngineFactory::CreateEngine(OcrEngineType::Tesseract);
+auto ocr = OcrEngineFactory::CreateEngine(OcrEngineType::PaddleOCR);
 
 if (ocr) {
-    ocr->Initialize("C:/path/to/tessdata", "jpn");
+    ocr->Initialize("C:/path/to/paddle/models", "jpn");
     
     cv::Mat frame = /* 캡처된 프레임 */;
     auto results = ocr->RecognizeText(frame);
@@ -75,7 +74,7 @@ public:
 };
 
 // 사용
-auto ocr = OcrEngineFactory::CreateEngine(OcrEngineType::Tesseract);
+auto ocr = OcrEngineFactory::CreateEngine(OcrEngineType::PaddleOCR);
 OcrProcessor processor(std::move(ocr));
 ```
 
@@ -112,13 +111,14 @@ private:
 
 std::unique_ptr<IOcrEngine> OcrEngineFactory::CreateEngine(OcrEngineType type) {
     switch (type) {
-        case OcrEngineType::Tesseract:
-            return std::make_unique<TesseractWrapper>();
-        
         case OcrEngineType::PaddleOCR:
-            return std::make_unique<PaddleOcrWrapper>();  // 추가!
-        
-        // ...
+            return std::make_unique<PaddleOcrWrapper>();
+
+        case OcrEngineType::FutureExperimental:
+            return std::make_unique<FutureOcrWrapper>();
+
+        default:
+            return nullptr;
     }
 }
 ```
@@ -127,14 +127,13 @@ std::unique_ptr<IOcrEngine> OcrEngineFactory::CreateEngine(OcrEngineType type) {
 ```cmake
 add_library(toriyomi_ocr
     src/core/ocr/ocr_engine.cpp
-    src/core/ocr/tesseract_wrapper.cpp
-    src/core/ocr/paddle_ocr_wrapper.cpp  # 추가!
+    src/core/ocr/paddle_ocr_wrapper.cpp
+    src/core/ocr/ocr_engine_bootstrapper.cpp
 )
 
 target_link_libraries(toriyomi_ocr
     ${OpenCV_LIBS}
-    ${Tesseract_LIBRARIES}
-    ${PaddleOCR_LIBRARIES}  # 추가!
+    toriyomi_paddleocr
 )
 ```
 
@@ -142,25 +141,24 @@ target_link_libraries(toriyomi_ocr
 
 ### ✅ 구현됨:
 - `IOcrEngine` 추상 인터페이스
-- `PaddleOcrWrapper` (FastDeploy PPOCRv4 파이프라인, **기본 엔진**)
-- `TesseractWrapper` (폴백 엔진)
-- `OcrEngineFactory` & `OcrEngineBootstrapper` (Paddle → Tesseract 자동 폴백)
+- `PaddleOcrWrapper` (Paddle cpp_infer 파이프라인, **유일한 엔진**)
+- `OcrEngineFactory` & `OcrEngineBootstrapper` (Paddle 전용 초기화 및 오류 보고)
 - 단위 테스트 (11개+)
 - CMake 자동 DLL 배포 시스템
-- UI 기본 설정: PaddleOCR 우선
+- UI 기본 설정: PaddleOCR 기본값
 
 ### 🚧 향후 계획:
 1. **실제 게임 화면 테스트**
-   - PaddleOCR vs Tesseract 성능 비교
-   - 인식률, 속도 평가
+    - PaddleOCR 인식률 및 속도 측정
+    - 프레임 스킵, ROI 기반 최적화
 
 2. **PaddleOCR 최적화**
-    - 모델 전처리 & 배포 자동화
-    - GPU 가속 지원 검토
+     - 모델 전처리 & 배포 자동화
+     - GPU/ONNX Runtime 경로 검토
 
 3. **전처리 파이프라인**
-   - 이진화, 노이즈 제거
-   - 텍스트 영역 사전 감지
+    - CLAHE, bilateral filter 등 선택적 필터링
+    - 텍스트 영역 사전 감지 연구
 
 ## 💡 설계 장점
 
@@ -173,17 +171,17 @@ target_link_libraries(toriyomi_ocr
 ## 🔍 다음 단계
 
 ```bash
-# 1. jpn.traineddata 다운로드
-# https://github.com/tesseract-ocr/tessdata
+# 1. Paddle Inference SDK / 모델 다운로드
+#    - SDK: https://www.paddlepaddle.org.cn/inference/download (Windows CPU)
+#    - 모델: models/paddleocr/{det,rec,ppocr_keys_v1.txt}
 
-# 2. 빌드
-cd build
-cmake ..
+# 2. CMake 구성 시 필수 옵션 전달
+cmake .. -DTORIYOMI_PADDLE_DIR="C:/Dev/paddle_inference" \
+         -DTORIYOMI_PADDLE_RUNTIME_DIR="C:/Dev/paddle_inference/paddle/lib"
+
+# 3. 빌드 및 테스트
 cmake --build . --config Release
+ctest -C Release --output-on-failure
 
-# 3. 테스트 실행
-./bin/tests/Release/test_tesseract_wrapper.exe
-
-# 4. 실제 게임 화면으로 성능 측정
-# 필요시 PaddleOCR로 전환 결정
+# 4. 실제 게임 화면으로 성능 측정 및 파라미터 튜닝
 ```
