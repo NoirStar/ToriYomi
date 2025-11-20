@@ -46,7 +46,7 @@ ToriYomi는 일본어 게임 플레이 중 **실시간으로 한자에 후리가
 
 ```
 ┌─────────────┐
-│ 게임 화면    │ ──DXGI──> CaptureThread
+│ 게임 화면   │ ──DXGI──> CaptureThread
 └─────────────┘              │
                              v
                         FrameQueue (스레드 안전)
