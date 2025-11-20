@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <numeric>
+#include <optional>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 #include <string>
@@ -25,10 +26,10 @@ using toriyomi::ocr::TextSegment;
 
 constexpr const char* kBase64FixturePath = TORIYOMI_UI_SCREENSHOT_BASE64_PATH;
 
-std::string LoadBase64Fixture() {
+std::optional<std::string> LoadBase64Fixture() {
     std::ifstream stream{kBase64FixturePath, std::ios::binary};
     if (!stream) {
-        GTEST_SKIP() << "Failed to open base64 fixture at " << kBase64FixturePath;
+        return std::nullopt;
     }
 
     std::string contents{std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
@@ -104,7 +105,10 @@ TEST(PaddleOcrIntegrationTest, GeneratesSnapshotArtifacts) {
     }
 
     const auto base64Image = LoadBase64Fixture();
-    const auto decoded = DecodeBase64ToImage(base64Image);
+    if (!base64Image) {
+        GTEST_SKIP() << "Failed to open base64 fixture at " << kBase64FixturePath;
+    }
+    const auto decoded = DecodeBase64ToImage(*base64Image);
     ASSERT_FALSE(decoded.empty()) << "Failed to decode sample image";
 
     OcrBootstrapConfig config;

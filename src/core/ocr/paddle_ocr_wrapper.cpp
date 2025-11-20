@@ -88,7 +88,13 @@ bool PaddleOcrWrapper::Runtime::Initialize(const PaddleOcrOptions& options) {
 
     OCRPipelineParams params;
     params.text_detection_model_dir = detPath.string();
+    if (options.detModelName) {
+        params.text_detection_model_name = options.detModelName.value();
+    }
     params.text_recognition_model_dir = recPath.string();
+    if (options.recModelName) {
+        params.text_recognition_model_name = options.recModelName.value();
+    }
     params.use_doc_orientation_classify = options.enableDocOrientation;
     params.use_doc_unwarping = false;
     params.use_textline_orientation = options.enableTextlineOrientation;
@@ -102,6 +108,9 @@ bool PaddleOcrWrapper::Runtime::Initialize(const PaddleOcrOptions& options) {
     if (options.enableCls && !options.clsModelDir.empty()) {
         params.textline_orientation_model_dir = options.clsModelDir.string();
         params.textline_orientation_batch_size = options.recBatchSize;
+        if (options.clsModelName) {
+            params.textline_orientation_model_name = options.clsModelName.value();
+        }
     }
 
     try {

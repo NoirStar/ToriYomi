@@ -115,6 +115,8 @@ $env:TEMP="C:\Temp"; $env:TMP="C:\Temp"  # vcpkg 빌드 임시 경로 설정
 
 Paddle Inference SDK와 모델을 어떻게 설치할지는 `BUILD.md`와 `configs/paddle_ocr*.json`을 기준으로 관리합니다. 과거 CLI 실험용 명령어나 DLL 체크리스트는 모두 정리했고, 지금은 **ToriYomi 빌드만 신경 쓰면 되는 상태**입니다.
 
+> 💡 `models/paddleocr/det|rec|cls` 폴더 안에 공식 배포 그대로의 `inference.yml`이 들어 있으면, ToriYomi가 `Global.model_name` 값을 자동으로 읽어 Paddle cpp_infer 파이프라인에 전달합니다. 따라서 CLI에서 따로 `--text_detection_model_name=PP-OCRv5_mobile_det` 같은 플래그를 지정할 필요가 없고, 모바일/서버 모델 중 어떤 패키지를 쓰더라도 그대로 동작합니다.
+
 #### 3. 프로젝트 빌드
 
 ```powershell

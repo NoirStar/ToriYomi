@@ -27,6 +27,10 @@
 #endif
 #include <psapi.h>
 #include <opencv2/imgcodecs.hpp>
+#include <opencv2/imgproc.hpp>
+
+#include "core/capture/dxgi_capture.h"
+#include "core/capture/gdi_capture.h"
 
 namespace {
 
@@ -52,6 +56,78 @@ QString OcrEngineNameForDisplay(toriyomi::ocr::OcrEngineType type) {
         default:
             return QStringLiteral("Unknown");
     }
+}
+
+constexpr int kPreferredWindowMinWidth = 320;
+constexpr int kPreferredWindowMinHeight = 200;
+constexpr int kPreferredWindowMinArea = kPreferredWindowMinWidth * kPreferredWindowMinHeight;
+
+bool QueryWindowArea(HWND hwnd, int* width, int* height) {
+    if (!hwnd || !IsWindow(hwnd)) {
+        return false;
+    }
+
+    RECT rect{};
+    if (!GetWindowRect(hwnd, &rect)) {
+        return false;
+    }
+
+    const LONG w = rect.right - rect.left;
+    const LONG h = rect.bottom - rect.top;
+    if (w <= 0 || h <= 0) {
+        return false;
+    }
+
+    if (width) {
+        *width = static_cast<int>(w);
+    }
+    if (height) {
+        *height = static_cast<int>(h);
+    }
+    return true;
+}
+
+cv::Mat CropFrameToClientArea(HWND target, const cv::Mat& frame) {
+    if (!target || !IsWindow(target) || frame.empty()) {
+        return cv::Mat();
+    }
+
+    RECT clientRect{};
+    if (!GetClientRect(target, &clientRect)) {
+        return cv::Mat();
+    }
+
+    POINT clientTopLeft{0, 0};
+    if (!ClientToScreen(target, &clientTopLeft)) {
+        return cv::Mat();
+    }
+
+    LONG monitorLeft = 0;
+    LONG monitorTop = 0;
+    HMONITOR monitor = MonitorFromWindow(target, MONITOR_DEFAULTTONEAREST);
+    if (monitor) {
+        MONITORINFO monitorInfo{};
+        monitorInfo.cbSize = sizeof(MONITORINFO);
+        if (GetMonitorInfo(monitor, &monitorInfo)) {
+            monitorLeft = monitorInfo.rcMonitor.left;
+            monitorTop = monitorInfo.rcMonitor.top;
+        }
+    }
+
+    const int width = std::max(1L, clientRect.right - clientRect.left);
+    const int height = std::max(1L, clientRect.bottom - clientRect.top);
+    const int relativeX = clientTopLeft.x - static_cast<int>(monitorLeft);
+    const int relativeY = clientTopLeft.y - static_cast<int>(monitorTop);
+
+    cv::Rect desired(relativeX, relativeY, width, height);
+    cv::Rect frameRect(0, 0, frame.cols, frame.rows);
+    cv::Rect safe = desired & frameRect;
+
+    if (safe.width <= 0 || safe.height <= 0) {
+        return cv::Mat();
+    }
+
+    return frame(safe).clone();
 }
 
 }
@@ -121,6 +197,10 @@ void AppBackend::refreshProcessList() {
     processList_.clear();
     processWindows_.clear();
 
+    // 기본 전체 화면 캡처 옵션 추가
+    processList_.append(QStringLiteral("전체 화면 캡처 (Desktop)"));
+    processWindows_.push_back(GetDesktopWindow());
+
     for (const auto& entry : processes) {
         processList_.append(entry.displayText);
         processWindows_.push_back(entry.windowHandle);
@@ -139,14 +219,115 @@ void AppBackend::selectProcess(int index) {
         return;
     }
 
-    selectedWindow_ = processWindows_[index];
+    HWND candidate = processWindows_[index];
+    if (!candidate || !IsWindow(candidate)) {
+        qWarning() << "[AppBackend] 유효하지 않은 윈도우 핸들, 인덱스:" << index;
+        emit logMessage(QString("[%1] 경고: 선택한 윈도우 핸들을 사용할 수 없습니다")
+            .arg(QDateTime::currentDateTime().toString("HH:mm:ss")));
+        return;
+    }
+
+    HWND resolvedWindow = ResolvePreferredWindow(candidate);
+    if (resolvedWindow != candidate) {
+        processWindows_[index] = resolvedWindow;
+        candidate = resolvedWindow;
+        emit logMessage(QString("[%1] 참고: 더 큰 윈도우를 자동으로 선택했습니다 (원래 선택은 보조 창으로 추정)")
+            .arg(QDateTime::currentDateTime().toString("HH:mm:ss")));
+    }
+
+    selectedWindow_ = candidate;
     hasRoiSelection_ = false;
     refreshPreviewImage();
     
-    qDebug() << "[AppBackend] 프로세스 선택:" << processList_[index];
-    emit logMessage(QString("[%1] 프로세스 선택: %2")
+    wchar_t title[256] = {0};
+    GetWindowTextW(selectedWindow_, title, 256);
+    DWORD pid = 0;
+    GetWindowThreadProcessId(selectedWindow_, &pid);
+
+    const QString windowLabel = QString::fromWCharArray(title);
+    const QString hwndHex = QString::number(reinterpret_cast<qulonglong>(selectedWindow_), 16).toUpper();
+
+    int windowWidth = 0;
+    int windowHeight = 0;
+    QueryWindowArea(selectedWindow_, &windowWidth, &windowHeight);
+
+    qDebug() << "[AppBackend] 프로세스 선택:" << processList_[index]
+             << "PID=" << pid << "HWND=0x" << hwndHex
+             << "크기=" << windowWidth << "x" << windowHeight;
+    emit logMessage(QString("[%1] 프로세스 선택: %2 (PID=%3, HWND=0x%4, %5x%6)")
         .arg(QDateTime::currentDateTime().toString("HH:mm:ss"))
-        .arg(processList_[index]));
+        .arg(!windowLabel.isEmpty() ? windowLabel : processList_[index])
+        .arg(pid)
+        .arg(hwndHex)
+        .arg(windowWidth)
+        .arg(windowHeight));
+}
+
+HWND AppBackend::ResolvePreferredWindow(HWND candidate) const {
+    if (!candidate || !IsWindow(candidate)) {
+        return candidate;
+    }
+
+    int width = 0;
+    int height = 0;
+    if (!QueryWindowArea(candidate, &width, &height)) {
+        return candidate;
+    }
+
+    const int area = width * height;
+    if (area >= kPreferredWindowMinArea) {
+        return candidate;
+    }
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId(candidate, &pid);
+    if (!pid) {
+        return candidate;
+    }
+
+    struct SearchContext {
+        DWORD pid;
+        HWND best;
+        int bestArea;
+        int minArea;
+    } context{pid, candidate, area, kPreferredWindowMinArea};
+
+    EnumWindows([](HWND hwnd, LPARAM param) -> BOOL {
+        auto* ctx = reinterpret_cast<SearchContext*>(param);
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        if (pid != ctx->pid || hwnd == ctx->best) {
+            return TRUE;
+        }
+
+        if (!IsWindowVisible(hwnd) || IsIconic(hwnd)) {
+            return TRUE;
+        }
+
+        if (GetWindow(hwnd, GW_OWNER) != nullptr) {
+            return TRUE;
+        }
+
+        RECT rect{};
+        if (!GetWindowRect(hwnd, &rect)) {
+            return TRUE;
+        }
+
+        const int width = rect.right - rect.left;
+        const int height = rect.bottom - rect.top;
+        if (width <= 0 || height <= 0) {
+            return TRUE;
+        }
+
+        const int area = width * height;
+        if (area >= ctx->minArea && area > ctx->bestArea) {
+            ctx->best = hwnd;
+            ctx->bestArea = area;
+        }
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&context));
+
+    return context.best;
 }
 
 void AppBackend::selectRoi(int x, int y, int width, int height) {
@@ -198,32 +379,42 @@ void AppBackend::startCapture() {
     }
 
     if (!selectedWindow_) {
-        SetStatusMessage("프로세스를 먼저 선택하세요");
-        emit logMessage(QString("[%1] 오류: 프로세스 미선택")
+        selectedWindow_ = GetDesktopWindow();
+        hasRoiSelection_ = false;
+        emit logMessage(QString("[%1] 기본 전체 화면 캡처 모드 활성화")
             .arg(QDateTime::currentDateTime().toString("HH:mm:ss")));
-        return;
     }
 
     // ROI 미선택 시 전체 윈도우 크기로 설정
     if (!hasRoiSelection_) {
         RECT rect;
+        bool roiResolved = false;
         if (GetClientRect(selectedWindow_, &rect)) {
             selectedRoi_ = cv::Rect(0, 0, rect.right - rect.left, rect.bottom - rect.top);
-            hasRoiSelection_ = true;
-            ApplyRoiToOcrThread();
-            
-            qDebug() << "[AppBackend] ROI 미선택 - 전체 윈도우 캡처:" 
-                     << selectedRoi_.width << "x" << selectedRoi_.height;
-            emit logMessage(QString("[%1] ROI 미선택 - 전체 윈도우 캡처 (%2x%3)")
-                .arg(QDateTime::currentDateTime().toString("HH:mm:ss"))
-                .arg(selectedRoi_.width)
-                .arg(selectedRoi_.height));
-        } else {
+            roiResolved = true;
+        } else if (selectedWindow_ == GetDesktopWindow()) {
+            selectedRoi_ = cv::Rect(0, 0,
+                                    GetSystemMetrics(SM_CXSCREEN),
+                                    GetSystemMetrics(SM_CYSCREEN));
+            roiResolved = true;
+        }
+
+        if (!roiResolved) {
             SetStatusMessage("윈도우 크기를 가져올 수 없습니다");
             emit logMessage(QString("[%1] 오류: 윈도우 크기 조회 실패")
                 .arg(QDateTime::currentDateTime().toString("HH:mm:ss")));
             return;
         }
+
+        hasRoiSelection_ = true;
+        ApplyRoiToOcrThread();
+        
+        qDebug() << "[AppBackend] ROI 미선택 - 전체 윈도우 캡처:" 
+                 << selectedRoi_.width << "x" << selectedRoi_.height;
+        emit logMessage(QString("[%1] ROI 미선택 - 전체 윈도우 캡처 (%2x%3)")
+            .arg(QDateTime::currentDateTime().toString("HH:mm:ss"))
+            .arg(selectedRoi_.width)
+            .arg(selectedRoi_.height));
     }
 
     qDebug() << "[AppBackend] 캡처 시작...";
@@ -841,13 +1032,63 @@ QVariantList AppBackend::ConvertTokensToVariant(const std::vector<tokenizer::Tok
 }
 
 QPixmap AppBackend::CaptureWindowPreview() const {
-    if (!selectedWindow_ || !IsWindow(selectedWindow_)) {
+    auto convertToPixmap = [](const cv::Mat& frame) -> QPixmap {
+        if (frame.empty()) {
+            return QPixmap();
+        }
+        cv::Mat rgb;
+        if (frame.channels() == 3) {
+            cv::cvtColor(frame, rgb, cv::COLOR_BGR2RGB);
+        } else if (frame.channels() == 4) {
+            cv::cvtColor(frame, rgb, cv::COLOR_BGRA2RGB);
+        } else {
+            cv::cvtColor(frame, rgb, cv::COLOR_GRAY2RGB);
+        }
+        QImage image(rgb.data, rgb.cols, rgb.rows, static_cast<int>(rgb.step), QImage::Format_RGB888);
+        return QPixmap::fromImage(image.copy());
+    };
+
+    HWND target = selectedWindow_ ? selectedWindow_ : GetDesktopWindow();
+    if (!target || !IsWindow(target)) {
         return QPixmap();
     }
 
+    // DXGI 기반 프리뷰 우선 시도 (GPU 가속 창 대응)
+    capture::DxgiCapture dxgiPreview;
+    if (dxgiPreview.Initialize(target)) {
+        cv::Mat frame = dxgiPreview.CaptureFrame();
+        dxgiPreview.Shutdown();
+        cv::Mat cropped = CropFrameToClientArea(target, frame);
+        if (!cropped.empty()) {
+            QPixmap pix = convertToPixmap(cropped);
+            if (!pix.isNull()) {
+                return pix;
+            }
+        }
+    }
+
+    // DXGI 실패 시 GDI 폴백
+    capture::GdiCapture previewCapture;
+    if (previewCapture.Initialize(target)) {
+        cv::Mat frame = previewCapture.CaptureFrame();
+        previewCapture.Shutdown();
+        QPixmap pix = convertToPixmap(frame);
+        if (!pix.isNull()) {
+            return pix;
+        }
+    }
+
+    // 모든 캡처 실패 시 QScreen 경로로 최종 폴백
     RECT rect;
-    if (!GetWindowRect(selectedWindow_, &rect)) {
-        return QPixmap();
+    if (!GetWindowRect(target, &rect)) {
+        if (target == GetDesktopWindow()) {
+            rect.left = 0;
+            rect.top = 0;
+            rect.right = GetSystemMetrics(SM_CXSCREEN);
+            rect.bottom = GetSystemMetrics(SM_CYSCREEN);
+        } else {
+            return QPixmap();
+        }
     }
 
     const int centerX = static_cast<int>((rect.left + rect.right) / 2);
@@ -861,19 +1102,36 @@ QPixmap AppBackend::CaptureWindowPreview() const {
         screen = screens.front();
     }
 
-    QPixmap pixmap = screen->grabWindow(reinterpret_cast<WId>(selectedWindow_));
+    QPixmap pixmap;
+    if (target == GetDesktopWindow()) {
+        pixmap = screen->grabWindow(0);
+    } else {
+        pixmap = screen->grabWindow(reinterpret_cast<WId>(target));
+    }
     if (pixmap.isNull()) {
         return pixmap;
     }
 
     RECT clientRect;
-    if (!GetClientRect(selectedWindow_, &clientRect)) {
-        return pixmap;
+    if (!GetClientRect(target, &clientRect)) {
+        if (target == GetDesktopWindow()) {
+            clientRect.left = 0;
+            clientRect.top = 0;
+            clientRect.right = GetSystemMetrics(SM_CXSCREEN);
+            clientRect.bottom = GetSystemMetrics(SM_CYSCREEN);
+        } else {
+            return pixmap;
+        }
     }
 
     POINT clientTopLeft{0, 0};
-    if (!ClientToScreen(selectedWindow_, &clientTopLeft)) {
-        return pixmap;
+    if (!ClientToScreen(target, &clientTopLeft)) {
+        if (target == GetDesktopWindow()) {
+            clientTopLeft.x = 0;
+            clientTopLeft.y = 0;
+        } else {
+            return pixmap;
+        }
     }
 
     const int clientWidth = std::max(1L, clientRect.right - clientRect.left);

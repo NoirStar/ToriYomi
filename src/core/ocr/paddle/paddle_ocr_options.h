@@ -19,6 +19,9 @@ struct PaddleOcrOptions {
     std::filesystem::path recModelDir;
     std::filesystem::path clsModelDir;
     std::filesystem::path labelPath;
+    std::optional<std::string> detModelName;
+    std::optional<std::string> recModelName;
+    std::optional<std::string> clsModelName;
     std::string language = "jpn";
 
     PaddleDeviceType device = PaddleDeviceType::CPU;

@@ -6,12 +6,16 @@
 #include <thread>
 
 #include <nlohmann/json.hpp>
+#include <yaml-cpp/yaml.h>
 
 namespace toriyomi {
 namespace ocr {
 namespace {
 constexpr const char* kDefaultDetDir = "det";
 constexpr const char* kDefaultRecDir = "rec";
+constexpr const char* kDefaultClsDir = "cls";
+constexpr const char* kInferenceConfig = "inference.yml";
+namespace fs = std::filesystem;
 
 int ResolveCpuThreads(int requested) {
     if (requested > 0) {
@@ -31,6 +35,40 @@ std::string NormalizeLanguage(std::string language) {
     return language;
 }
 
+std::optional<std::string> TryReadModelName(const fs::path& modelDir) {
+    if (modelDir.empty()) {
+        return std::nullopt;
+    }
+    const auto configPath = modelDir / kInferenceConfig;
+    if (!fs::exists(configPath)) {
+        return std::nullopt;
+    }
+
+    try {
+        const YAML::Node root = YAML::LoadFile(configPath.string());
+        const YAML::Node global = root["Global"];
+        if (global && global["model_name"]) {
+            const auto value = global["model_name"].as<std::string>("");
+            if (!value.empty()) {
+                return value;
+            }
+        }
+    } catch (const std::exception&) {
+        // 모델 이름은 편의 기능이므로 파싱 실패 시 무시합니다.
+    }
+    return std::nullopt;
+}
+
+void PopulateModelMetadata(PaddleOcrOptions& options) {
+    options.detModelName = TryReadModelName(options.detModelDir);
+    options.recModelName = TryReadModelName(options.recModelDir);
+    if (!options.clsModelDir.empty()) {
+        options.clsModelName = TryReadModelName(options.clsModelDir);
+    } else {
+        options.clsModelName.reset();
+    }
+}
+
 }  // namespace
 
 PaddleOcrOptions PaddleOcrOptions::FromModelRoot(const std::filesystem::path& root,
@@ -38,8 +76,13 @@ PaddleOcrOptions PaddleOcrOptions::FromModelRoot(const std::filesystem::path& ro
     PaddleOcrOptions options;
     options.detModelDir = root / kDefaultDetDir;
     options.recModelDir = root / kDefaultRecDir;
+    const auto clsDir = root / kDefaultClsDir;
+    if (std::filesystem::exists(clsDir)) {
+        options.clsModelDir = clsDir;
+    }
     options.language = NormalizeLanguage(language);
     options.cpuThreads = ResolveCpuThreads(0);
+    PopulateModelMetadata(options);
     return options;
 }
 
@@ -122,6 +165,8 @@ std::optional<PaddleOcrOptions> PaddleOcrOptions::FromJsonFile(const std::filesy
         errorMessage = "Paddle OCR config must contain det_model and rec_model";
         return std::nullopt;
     }
+
+    PopulateModelMetadata(opts);
 
     return opts;
 }

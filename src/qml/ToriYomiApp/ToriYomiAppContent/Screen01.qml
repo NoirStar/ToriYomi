@@ -24,7 +24,11 @@ Screen01Form {
     
     function onProcessListChanged() {
         comboBox.model = appBackend.processList
-        comboBox.currentIndex = -1
+        if (appBackend.processList.length > 0) {
+            comboBox.currentIndex = 0
+        } else {
+            comboBox.currentIndex = -1
+        }
     }
     
     function onLogMessage(message) {

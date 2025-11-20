@@ -107,6 +107,7 @@ private:
                                const std::shared_ptr<std::future<void>>& futureRef);
     void SetStatusMessage(const QString& message);
     QPixmap CaptureWindowPreview() const;
+    HWND ResolvePreferredWindow(HWND candidate) const;
     void ApplyRoiToOcrThread();
     void DispatchSentenceForTokenization(const QString& text);
     void HandleTokensReady(const QString& text, std::vector<tokenizer::Token>&& tokens);

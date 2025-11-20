@@ -95,17 +95,23 @@ if (NOT TORIYOMI_PADDLE_RUNTIME_DIR)
 endif()
 
 set(PADDLE_RUNTIME_DIRS ${TORIYOMI_PADDLE_RUNTIME_DIR})
-set(PADDLE_THIRD_PARTY_INSTALL_DIR "${TORIYOMI_PADDLE_DIR}/paddle/third_party/install")
-if (EXISTS "${PADDLE_THIRD_PARTY_INSTALL_DIR}")
-	file(GLOB PADDLE_THIRD_PARTY_COMPONENT_DIRS LIST_DIRECTORIES TRUE "${PADDLE_THIRD_PARTY_INSTALL_DIR}/*")
-	foreach(component_dir ${PADDLE_THIRD_PARTY_COMPONENT_DIRS})
-		foreach(subdir lib bin)
-			if (EXISTS "${component_dir}/${subdir}")
-				list(APPEND PADDLE_RUNTIME_DIRS "${component_dir}/${subdir}")
-			endif()
+set(PADDLE_THIRD_PARTY_INSTALL_DIRS
+	"${TORIYOMI_PADDLE_DIR}/paddle/third_party/install"
+	"${TORIYOMI_PADDLE_DIR}/third_party/install"
+)
+
+foreach(paddle_tp_dir ${PADDLE_THIRD_PARTY_INSTALL_DIRS})
+	if (EXISTS "${paddle_tp_dir}")
+		file(GLOB PADDLE_THIRD_PARTY_COMPONENT_DIRS LIST_DIRECTORIES TRUE "${paddle_tp_dir}/*")
+		foreach(component_dir ${PADDLE_THIRD_PARTY_COMPONENT_DIRS})
+			foreach(subdir lib bin)
+				if (EXISTS "${component_dir}/${subdir}")
+					list(APPEND PADDLE_RUNTIME_DIRS "${component_dir}/${subdir}")
+				endif()
+			endforeach()
 		endforeach()
-	endforeach()
-endif()
+	endif()
+endforeach()
 
 find_library(PADDLE_INFERENCE_LIB
 	NAMES paddle_inference

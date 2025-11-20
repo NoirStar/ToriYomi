@@ -1,5 +1,6 @@
 #include "ui/qml_backend/process_enumerator.h"
 
+#include <algorithm>
 #include <psapi.h>
 #include <utility>
 #include <vector>
@@ -48,6 +49,17 @@ QString BuildDisplayName(HWND hwnd, DWORD selfProcessId) {
     if (wcslen(processName) > 0) {
         text += QStringLiteral(" (%1)").arg(QString::fromWCharArray(processName));
     }
+
+    RECT rect{};
+    if (GetWindowRect(hwnd, &rect)) {
+        const int width = std::max<LONG>(1, rect.right - rect.left);
+        const int height = std::max<LONG>(1, rect.bottom - rect.top);
+        text += QStringLiteral(" [%1x%2]").arg(width).arg(height);
+    }
+
+    text += QStringLiteral(" [PID %1 | HWND 0x%2]")
+                .arg(QString::number(processId))
+                .arg(QString::number(reinterpret_cast<qulonglong>(hwnd), 16).toUpper());
     return text;
 }
 
