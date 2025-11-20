@@ -54,114 +54,145 @@ cd ToriYomi
 #### 5. Download PaddleOCR models
 
 Place the PP-OCR models under `models/paddleocr` (relative to the app binary). The directory must contain `det`, `rec`, `cls`, and `ppocr_keys_v1.txt`.
+# ToriYomi 빌드 가이드 (Windows)
 
+개인 개발 환경에서 ToriYomi를 다시 빌드할 때 필요한 최소한의 절차만 정리한 문서입니다.
+
+---
+
+## 1. 필수 도구
+
+- **CMake** 3.31+
+- **Visual Studio 2022 (MSVC 2022)**
+- **OpenCV** 4.11+
+- **Paddle Inference SDK** 2.6+ (cpp_infer, CPU 전용)
+- **MeCab** 0.996+ (일본어 토크나이저)
+
+> 지금 시점에서는 프로젝트가 PaddleOCR에 100% 의존하므로, Paddle Inference SDK와 모델 경로는 항상 필수라고 가정합니다.
+
+---
+
+## 2. vcpkg 및 C++ 라이브러리 설치
+
+### 2.1 vcpkg 설치
+
+```powershell
+git clone https://github.com/Microsoft/vcpkg.git
+cd vcpkg
+./bootstrap-vcpkg.bat
+./vcpkg integrate install
 ```
+
+### 2.2 의존성 설치 스크립트 실행
+
+레포에 포함된 스크립트를 사용하는 것을 기준으로 합니다.
+
+```powershell
+cd ToriYomi
+./scripts/install_vcpkg_dependencies.ps1 `
+    -VcpkgRoot "H:\dev\vcpkg" `
+    -Packages @('abseil','opencv','gtest','fmt','yaml-cpp','spdlog')
+```
+
+Abseil 최신 버전의 C++20 강제 옵션, pthread 플래그 등은 이 스크립트에서 자동으로 처리한다고 가정하고, 여기서는 세부 환경 변수 설명은 생략합니다.
+
+---
+
+## 3. MeCab 설치
+
+```powershell
+# https://github.com/ikegami-yukino/mecab/releases 에서
+# mecab-0.996-64.exe 다운로드 후 설치
+# 기본 경로 예시: C:\Program Files\MeCab
+```
+
+`libmecab.dll` 경로는 CMake 설정 시 `MECAB_DLL_PATH` 옵션으로 넘겨서, 실행 파일/테스트 옆으로 자동 복사되도록 합니다.
+
+---
+
+## 4. Paddle Inference SDK 설치
+
+1. [Paddle Inference 다운로드 페이지](https://www.paddlepaddle.org.cn/inference/download)에서 **Windows CPU x86_64** 패키지를 받습니다.
+2. 예를 들어 `C:\Dev\paddle_inference` 에 압축을 풉니다.
+3. CMake 설정 시 다음 옵션을 넘깁니다.
+
+    - `-DTORIYOMI_PADDLE_DIR="C:/Dev/paddle_inference"`
+    - `-DTORIYOMI_PADDLE_RUNTIME_DIR="C:/Dev/paddle_inference/paddle/lib"`
+
+`TORIYOMI_PADDLE_RUNTIME_DIR` 아래에 있는 DLL 들은 빌드 시 실행 파일/테스트 옆으로 자동 복사됩니다.
+
+> PaddleOCR를 끄는 빌드 옵션은 더 이상 고려하지 않습니다. 항상 Paddle을 쓴다는 가정으로만 관리합니다.
+
+---
+
+## 5. PaddleOCR 모델 배치
+
+앱 바이너리 기준으로 `models/paddleocr` 아래에 PP-OCR 모델들을 둡니다.
+
+필수 디렉터리 구조는 다음과 같습니다.
+
+```text
 models/
-    paddleocr/
-        det/
-        rec/
-        cls/
-        ppocr_keys_v1.txt
+  paddleocr/
+    det/
+    rec/
+    cls/
+    ppocr_keys_v1.txt
 ```
 
-You can grab pre-converted packages from the [PaddleOCR release page](https://github.com/PaddlePaddle/PaddleOCR/tree/release/2.7/deploy/cpp_infer) or run the official export scripts.
+모델 파일은 [PaddleOCR cpp_infer 릴리스](https://github.com/PaddlePaddle/PaddleOCR/tree/release/2.7/deploy/cpp_infer)에서 받거나, 공식 스크립트로 직접 export 해서 넣으면 됩니다.
 
-## Build
+---
 
-### Configure
+## 6. CMake 설정 및 빌드
+
+### 6.1 Configure
+
 ```powershell
 mkdir build
 cd build
 cmake .. `
-    -DCMAKE_TOOLCHAIN_FILE=[vcpkg root]/scripts/buildsystems/vcpkg.cmake `
-    -DCMAKE_PREFIX_PATH="C:/Qt/6.10.0/msvc2022_64" `
-    -DTORIYOMI_PADDLE_DIR="C:/Dev/paddle_inference" `
-    -DTORIYOMI_PADDLE_RUNTIME_DIR="C:/Dev/paddle_inference/paddle/lib" `
-    -DMECAB_DLL_PATH="C:/Program Files/MeCab/bin/libmecab.dll"
+  -DCMAKE_TOOLCHAIN_FILE="H:/dev/vcpkg/scripts/buildsystems/vcpkg.cmake" `
+  -DCMAKE_PREFIX_PATH="C:/Qt/6.10.0/msvc2022_64" `
+  -DTORIYOMI_PADDLE_DIR="C:/Dev/paddle_inference" `
+  -DTORIYOMI_PADDLE_RUNTIME_DIR="C:/Dev/paddle_inference/paddle/lib" `
+  -DMECAB_DLL_PATH="C:/Program Files/MeCab/bin/libmecab.dll"
 ```
 
-> ℹ️ **CMake Options**:
-> - `TORIYOMI_PADDLE_DIR`: Root of the Paddle Inference SDK (must contain `paddle/include`, `paddle/lib`).
-> - `TORIYOMI_PADDLE_RUNTIME_DIR`: Path to Paddle DLLs. All DLLs in this directory will be copied next to executables.
-> - `MECAB_DLL_PATH`: Path to `libmecab.dll`. Will be copied next to all executables and tests automatically.
+각 경로는 실제 본인 개발 환경에 맞게 수정하면 됩니다.
 
-### Compile
+### 6.2 Build
+
 ```powershell
 cmake --build . --config Release
 ```
 
-## Run Tests
+디버그 빌드가 필요하면 `--config Debug` 로만 바꿔서 쓰면 됩니다.
 
-### All Tests
+---
+
+## 7. 테스트 실행 (선택)
+
+현재는 혼자 개발하는 상황이라 필수는 아니지만, 기존 단위 테스트를 돌리고 싶을 때만 사용합니다.
+
+### 7.1 전체 테스트
+
 ```powershell
 cd build
 ctest -C Release --output-on-failure
 ```
 
-### Specific Test
+### 7.2 개별 테스트 실행 예시
+
 ```powershell
-.\bin\tests\Release\test_frame_queue.exe
+./bin/tests/Release/test_frame_queue.exe
 ```
 
-## Project Structure
+---
 
-```
-ToriYomi/
-├── CMakeLists.txt
-├── docs/
-│   ├── spec.md           # Technical specification
-│   └── code-style.md     # Code style guide
-├── src/
-│   └── core/
-│       └── capture/
-│           ├── frame_queue.h
-│           └── frame_queue.cpp
-└── tests/
-    └── unit/
-        └── test_frame_queue.cpp
-```
+## 8. 참고
 
-## Development Workflow (TDD)
+- 전체 기술 명세 및 로드맵: `docs/spec.md`
+- 코드 스타일: `docs/code-style.md`
 
-1. **Red**: Write failing test first
-2. **Green**: Write minimal code to pass the test
-3. **Refactor**: Improve code quality
-
-### Example: Adding a new feature
-```powershell
-# 1. Write test
-# Edit tests/unit/test_my_feature.cpp
-
-# 2. Run test (should fail)
-cmake --build build --config Release
-.\build\bin\tests\Release\test_my_feature.exe
-
-# 3. Implement feature
-# Edit src/my_feature.cpp
-
-# 4. Run test again (should pass)
-.\build\bin\tests\Release\test_my_feature.exe
-
-# 5. Refactor and commit
-git add .
-git commit -m "Add my_feature with tests"
-```
-
-## Troubleshooting
-
-### OpenCV not found
-```powershell
-# Make sure CMAKE_TOOLCHAIN_FILE points to vcpkg
-cmake .. -DCMAKE_TOOLCHAIN_FILE=C:/path/to/vcpkg/scripts/buildsystems/vcpkg.cmake
-```
-
-### Google Test not found
-```powershell
-# Reinstall gtest
-.\vcpkg remove gtest:x64-windows
-.\vcpkg install gtest:x64-windows
-```
-
-## Next Steps
-
-See [docs/spec.md](docs/spec.md) for the full technical specification and development roadmap.
+이 문서는 앞으로 개발 환경이 바뀔 때마다, 사용하지 않는 옵션/경고 문구는 바로 지우고, 실제로 사용하는 설정만 남기는 것을 원칙으로 합니다.
