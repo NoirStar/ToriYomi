@@ -14,6 +14,7 @@
 #include <QFileInfo>
 #include <algorithm>
 #include <cmath>
+#include <exception>
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -605,7 +606,6 @@ void AppBackend::OnPollOcrResults() {
         return;
     }
 
-    sentenceAssembler_.MarkSentenceInFlight(*assembled);
     DispatchSentenceForTokenization(*assembled);
 }
 
@@ -743,17 +743,12 @@ void AppBackend::DispatchSentenceForTokenization(const QString& text) {
         return;
     }
 
-    sentenceAssembler_.MarkSentenceInFlight(text);
-
     QPointer<AppBackend> self(this);
     auto futurePtr = std::make_shared<std::future<void>>();
 
-    {
-        std::lock_guard<std::mutex> guard(tokenizationFuturesMutex_);
-        tokenizationFutures_.push_back(futurePtr);
-    }
+    sentenceAssembler_.MarkSentenceInFlight(text);
 
-    *futurePtr = std::async(std::launch::async, [this, self, text, futurePtr]() mutable {
+    auto task = [this, self, text, futurePtr]() mutable {
         std::vector<tokenizer::Token> tokens;
         {
             std::lock_guard<std::mutex> lock(tokenizerMutex_);
@@ -778,7 +773,27 @@ void AppBackend::DispatchSentenceForTokenization(const QString& text) {
                 self->tokenizationFutures_.erase(it);
             }
         }, Qt::QueuedConnection);
-    });
+    };
+
+    try {
+        *futurePtr = std::async(std::launch::async, std::move(task));
+    } catch (const std::exception& ex) {
+        sentenceAssembler_.ClearSentenceInFlight(text);
+        emit logMessage(QString("[%1] 토큰화 작업 시작 실패: %2")
+            .arg(CurrentTimestamp())
+            .arg(QString::fromLocal8Bit(ex.what())));
+        return;
+    } catch (...) {
+        sentenceAssembler_.ClearSentenceInFlight(text);
+        emit logMessage(QString("[%1] 토큰화 작업 시작 실패: 알 수 없는 오류")
+            .arg(CurrentTimestamp()));
+        return;
+    }
+
+    {
+        std::lock_guard<std::mutex> guard(tokenizationFuturesMutex_);
+        tokenizationFutures_.push_back(futurePtr);
+    }
 }
 
 void AppBackend::HandleTokensReady(const QString& text, std::vector<tokenizer::Token>&& tokens) {

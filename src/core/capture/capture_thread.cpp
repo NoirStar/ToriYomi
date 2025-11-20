@@ -166,8 +166,8 @@ void CaptureThread::Impl::CaptureLoop() {
             continue;
         }
 
-        // 프레임을 큐에 푸시 (FrameQueue 내부에서 clone 수행)
-        frameQueue->Push(frame);
+        // 프레임을 큐에 푸시 (FrameQueue에서 move 처리)
+        frameQueue->Push(std::move(frame));
         totalFramesCaptured++;
         fpsFrameCount++;
 

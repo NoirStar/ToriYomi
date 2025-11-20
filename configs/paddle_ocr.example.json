@@ -1,0 +1,15 @@
+{
+  "det_model": "./models/paddleocr/ch_PP-OCRv4_det",
+  "rec_model": "./models/paddleocr/ch_PP-OCRv4_rec",
+  "cls_model": "./models/paddleocr/ch_ppocr_mobile_v2.0_cls",
+  "label_path": "./models/paddleocr/ppocr_keys_v1.txt",
+  "lang": "jpn",
+  "device": "cpu",
+  "gpu_id": 0,
+  "enable_mkldnn": true,
+  "cpu_threads": 8,
+  "rec_batch_size": 4,
+  "enable_cls": true,
+  "enable_doc_orientation": true,
+  "enable_textline_orientation": true
+}

@@ -37,16 +37,18 @@ public:
 	/**
 	 * @brief Push a frame into the queue
 	 * 
-	 * If the queue is full, the oldest frame will be dropped.
-	 * 
-	 * @param frame The frame to push (will be copied)
+	 * If the queue is full, the oldest frame will be dropped. Frames are passed
+	 * by value so callers can std::move them to avoid extra reference bumps.
+	 *
+	 * @param frame The frame to enqueue (copy or move)
 	 */
-	void Push(const cv::Mat& frame);
+	void Push(cv::Mat frame);
 	
 	/**
 	 * @brief Pop a frame from the queue
 	 * 
-	 * This method blocks until a frame is available or timeout occurs.
+	 * This method blocks until a frame is available or timeout occurs. Frames
+	 * are returned by move to avoid redundant clones.
 	 * 
 	 * @param timeoutMs Timeout in milliseconds
 	 * @return std::optional<cv::Mat> The frame if available, std::nullopt if timeout

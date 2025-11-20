@@ -85,17 +85,49 @@ bool OcrEngineBootstrapper::InitializePaddleOcr(const std::shared_ptr<IOcrEngine
         return false;
     }
 
+    PaddleOcrOptions resolvedOptions;
+    bool hasOptions = false;
+    if (config_.overrideOptions) {
+        resolvedOptions = *config_.overrideOptions;
+        hasOptions = true;
+    }
+
+    if (!hasOptions && !config_.paddleConfigPath.empty()) {
+        std::string errorMessage;
+        if (auto parsed = PaddleOcrOptions::FromJsonFile(config_.paddleConfigPath, errorMessage)) {
+            resolvedOptions = *parsed;
+            hasOptions = true;
+            SPDLOG_INFO("Loaded PaddleOCR config from {}", config_.paddleConfigPath);
+        } else {
+            SPDLOG_WARN("{}", errorMessage);
+        }
+    }
+
+    if (!hasOptions) {
+        resolvedOptions = PaddleOcrOptions::FromModelRoot(config_.paddleModelDirectory, config_.paddleLanguage);
+    }
+
+    if (resolvedOptions.language.empty()) {
+        resolvedOptions.language = config_.paddleLanguage;
+    }
+
+    if (auto* paddle = dynamic_cast<PaddleOcrWrapper*>(engine.get())) {
+        if (paddle->InitializeWithOptions(resolvedOptions)) {
+            SPDLOG_INFO("PaddleOCR initialized (config={})", config_.paddleConfigPath.empty() ? config_.paddleModelDirectory : config_.paddleConfigPath);
+            return true;
+        }
+
+        SPDLOG_ERROR("PaddleOCR initialization failed via options");
+        SPDLOG_ERROR("PaddleOCR detailed error: {}", paddle->GetLastError());
+        return false;
+    }
+
     if (engine->Initialize(config_.paddleModelDirectory, config_.paddleLanguage)) {
         SPDLOG_INFO("PaddleOCR initialized: {}", config_.paddleModelDirectory);
         return true;
     }
 
     SPDLOG_ERROR("PaddleOCR initialization failed: {}", config_.paddleModelDirectory);
-
-    if (auto* paddle = dynamic_cast<PaddleOcrWrapper*>(engine.get())) {
-        SPDLOG_ERROR("PaddleOCR detailed error: {}", paddle->GetLastError());
-    }
-
     return false;
 }
 

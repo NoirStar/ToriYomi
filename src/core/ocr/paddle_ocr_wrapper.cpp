@@ -47,10 +47,6 @@ std::string NormalizeLanguageCode(const std::string& language) {
     }
     return lowered.empty() ? std::string("ch") : lowered;
 }
-
-std::string BuildModelDir(const fs::path& root, const std::string& name) {
-    return (root / name).string();
-}
 }
 
 class PaddleOcrWrapper::Runtime {
@@ -58,39 +54,55 @@ public:
     Runtime() = default;
     ~Runtime() = default;
 
-    bool Initialize(const std::string& modelDir, const std::string& language);
+    bool Initialize(const PaddleOcrOptions& options);
     bool Predict(const cv::Mat& image, std::vector<TextSegment>& segments);
 
 private:
     std::unique_ptr<_OCRPipeline> pipeline_;
 };
 
-bool PaddleOcrWrapper::Runtime::Initialize(const std::string& modelDir, const std::string& language) {
-    fs::path root = fs::u8path(modelDir);
-    const std::string detModelDir = BuildModelDir(root, "det");
-    const std::string recModelDir = BuildModelDir(root, "rec");
+bool PaddleOcrWrapper::Runtime::Initialize(const PaddleOcrOptions& options) {
+    const fs::path detPath = options.detModelDir;
+    const fs::path recPath = options.recModelDir;
 
-    if (!fs::exists(detModelDir)) {
-        SPDLOG_ERROR("PaddleOCR det 모델 디렉터리를 찾을 수 없습니다: {}", detModelDir);
+    if (detPath.empty() || !fs::exists(detPath)) {
+        SPDLOG_ERROR("PaddleOCR det 모델 디렉터리를 찾을 수 없습니다: {}", detPath.string());
         return false;
     }
-    if (!fs::exists(recModelDir)) {
-        SPDLOG_ERROR("PaddleOCR rec 모델 디렉터리를 찾을 수 없습니다: {}", recModelDir);
+    if (recPath.empty() || !fs::exists(recPath)) {
+        SPDLOG_ERROR("PaddleOCR rec 모델 디렉터리를 찾을 수 없습니다: {}", recPath.string());
         return false;
     }
+
+    auto deviceToString = [](PaddleDeviceType device) {
+        switch (device) {
+            case PaddleDeviceType::GPU:
+                return std::string{"gpu"};
+            case PaddleDeviceType::DirectML:
+                return std::string{"dml"};
+            case PaddleDeviceType::CPU:
+            default:
+                return std::string{"cpu"};
+        }
+    };
 
     OCRPipelineParams params;
-    params.text_detection_model_dir = detModelDir;
-    params.text_recognition_model_dir = recModelDir;
-    params.use_doc_orientation_classify = false;
+    params.text_detection_model_dir = detPath.string();
+    params.text_recognition_model_dir = recPath.string();
+    params.use_doc_orientation_classify = options.enableDocOrientation;
     params.use_doc_unwarping = false;
-    params.use_textline_orientation = false;
-    params.text_recognition_batch_size = 1;
-    params.lang = NormalizeLanguageCode(language);
-    params.device = "cpu";
-    params.enable_mkldnn = Utility::IsMkldnnAvailable();
-    params.cpu_threads = static_cast<int>(std::max(2u, std::thread::hardware_concurrency()));
+    params.use_textline_orientation = options.enableTextlineOrientation;
+    params.text_recognition_batch_size = std::max(1, options.recBatchSize);
+    params.lang = NormalizeLanguageCode(options.language);
+    params.device = deviceToString(options.device);
+    params.enable_mkldnn = options.enableMkldnn && Utility::IsMkldnnAvailable();
+    params.cpu_threads = std::max(1, options.cpuThreads);
     params.thread_num = 1;
+
+    if (options.enableCls && !options.clsModelDir.empty()) {
+        params.textline_orientation_model_dir = options.clsModelDir.string();
+        params.textline_orientation_batch_size = options.recBatchSize;
+    }
 
     try {
         pipeline_ = std::make_unique<_OCRPipeline>(params);
@@ -173,26 +185,42 @@ PaddleOcrWrapper::~PaddleOcrWrapper() {
 }
 
 bool PaddleOcrWrapper::Initialize(const std::string& modelDir, const std::string& language) {
+    PaddleOcrOptions options = PaddleOcrOptions::FromModelRoot(modelDir, language);
+    return InitializeWithOptions(options);
+}
+
+bool PaddleOcrWrapper::InitializeWithOptions(const PaddleOcrOptions& options) {
     std::lock_guard<std::mutex> guard(runtimeMutex_);
     ResetRuntimeLocked();
 
-    modelDirectory_ = modelDir;
-    language_ = language;
+    PaddleOcrOptions normalized = options;
+    if (normalized.language.empty()) {
+        normalized.language = "jpn";
+    }
+    if (normalized.cpuThreads <= 0) {
+        const unsigned concurrency = std::thread::hardware_concurrency();
+        normalized.cpuThreads = concurrency == 0 ? 4 : static_cast<int>(concurrency);
+    }
+    if (normalized.recBatchSize <= 0) {
+        normalized.recBatchSize = 1;
+    }
 
-    if (modelDirectory_.empty()) {
-        lastError_ = "PaddleOCR 모델 경로가 비어 있습니다";
+    if (normalized.detModelDir.empty() || normalized.recModelDir.empty()) {
+        lastError_ = "PaddleOCR 모델 경로가 올바르지 않습니다";
         SPDLOG_WARN("{}", lastError_);
         return false;
     }
 
     runtime_ = std::make_unique<Runtime>();
-    if (!runtime_->Initialize(modelDirectory_, language_)) {
+    if (!runtime_->Initialize(normalized)) {
         runtime_.reset();
         lastError_ = "PaddleOCR 런타임 초기화 실패";
         SPDLOG_ERROR("{}", lastError_);
         return false;
     }
 
+    activeOptions_ = normalized;
+    hasActiveOptions_ = true;
     initialized_ = true;
     lastError_.clear();
     return true;

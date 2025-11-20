@@ -1,5 +1,6 @@
 #include "frame_queue.h"
 #include <chrono>
+#include <utility>
 
 namespace toriyomi {
 
@@ -10,7 +11,7 @@ FrameQueue::FrameQueue(size_t maxSize)
 	}
 }
 
-void FrameQueue::Push(const cv::Mat& frame) {
+void FrameQueue::Push(cv::Mat frame) {
 	std::lock_guard<std::mutex> lock(mutex_);
 	
 	// If queue is full, drop the oldest frame
@@ -18,8 +19,7 @@ void FrameQueue::Push(const cv::Mat& frame) {
 		queue_.pop();
 	}
 	
-	// Clone the frame to ensure deep copy
-	queue_.push(frame.clone());
+	queue_.push(std::move(frame));
 	
 	// Notify waiting consumers
 	condVar_.notify_one();
@@ -40,9 +40,7 @@ std::optional<cv::Mat> FrameQueue::Pop(int timeoutMs) {
 		return std::nullopt;
 	}
 	
-	// CRITICAL: clone() BEFORE pop() to avoid dangling reference
-	// queue_.front() returns a reference that becomes invalid after pop()
-	cv::Mat frame = queue_.front().clone();
+	cv::Mat frame = std::move(queue_.front());
 	queue_.pop();
 	
 	return frame;

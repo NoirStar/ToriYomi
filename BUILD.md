@@ -21,13 +21,17 @@ cd vcpkg
 ```
 
 #### 2. Install Dependencies
-```powershell
-# OpenCV
-.\vcpkg install opencv:x64-windows
 
-# Google Test
-.\vcpkg install gtest:x64-windows
+권장 방법은 저장소에 포함된 스크립트를 사용하는 것입니다. Abseil 20250814 이후 버전은 C++20 강제 옵션과 pthread 탐지를 우회해야 하므로, 스크립트가 이 환경 변수를 자동으로 설정합니다.
+
+```powershell
+cd ToriYomi
+.\scripts\install_vcpkg_dependencies.ps1 `
+    -VcpkgRoot "H:\dev\vcpkg" `
+    -Packages @('abseil','opencv','gtest','fmt','yaml-cpp','spdlog')
 ```
+
+> 필요에 따라 `-Packages` 목록을 수정하세요. `vcpkg.exe`를 직접 실행해야 한다면 `VCPKG_CMAKE_CONFIGURE_OPTIONS="-DCMAKE_CXX_STANDARD=20;-DTHREADS_PREFER_PTHREAD_FLAG=OFF"` 와 `VCPKG_CXX_FLAGS="/std:c++20"` 를 동일하게 설정해야 Abseil DLL 구성이 멈추지 않습니다.
 
 #### 3. Install MeCab (Japanese Tokenizer)
 ```powershell

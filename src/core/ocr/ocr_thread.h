@@ -15,7 +15,7 @@ namespace ocr {
  * @brief OCR 스레드 통계 정보
  */
 struct OcrStatistics {
-    uint64_t totalFramesProcessed = 0;  // 처리한 총 프레임 수
+    uint64_t totalFramesProcessed = 0;   // 처리한 총 프레임 수
     double currentFps = 0.0;             // 현재 OCR FPS
     uint64_t totalTextSegments = 0;      // 인식한 총 텍스트 세그먼트 수
     std::string engineName;              // 사용 중인 OCR 엔진 이름

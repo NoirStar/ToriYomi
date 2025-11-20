@@ -192,6 +192,7 @@ add_library(toriyomi_ocr
 	src/core/ocr/paddle_ocr_wrapper.cpp
 	src/core/ocr/ocr_engine_bootstrapper.cpp
 	src/core/ocr/ocr_thread.cpp
+	src/core/ocr/paddle/paddle_ocr_options.cpp
 )
 
 target_link_libraries(toriyomi_ocr
@@ -373,11 +374,33 @@ target_link_libraries(test_capture_thread
 	${OpenCV_LIBS}
 )
 
+add_executable(test_paddle_ocr_integration
+	tests/integration/test_paddle_ocr_integration.cpp
+)
+toriyomi_copy_mecab_dll(test_paddle_ocr_integration)
+toriyomi_copy_paddle_dlls(test_paddle_ocr_integration)
+
+target_link_libraries(test_paddle_ocr_integration
+	toriyomi_ocr
+	GTest::gtest
+	GTest::gtest_main
+	${OpenCV_LIBS}
+)
+
+target_include_directories(test_paddle_ocr_integration PRIVATE
+	${CMAKE_SOURCE_DIR}/third_party/paddleocr/third_party/nlohmann
+)
+
+target_compile_definitions(test_paddle_ocr_integration PRIVATE
+	TORIYOMI_UI_SCREENSHOT_BASE64_PATH="${CMAKE_SOURCE_DIR}/tests/data/ocr_samples/ui_screenshot_base64.txt"
+)
+
 # Add test to CTest
 add_test(NAME FrameQueueTest COMMAND test_frame_queue)
 add_test(NAME DxgiCaptureTest COMMAND test_dxgi_capture)
 add_test(NAME GdiCaptureTest COMMAND test_gdi_capture)
 add_test(NAME CaptureThreadTest COMMAND test_capture_thread)
+add_test(NAME PaddleOcrIntegrationTest COMMAND test_paddle_ocr_integration)
 
 # Test executable properties
 set_target_properties(test_frame_queue PROPERTIES
@@ -399,6 +422,12 @@ set_target_properties(test_gdi_capture PROPERTIES
 )
 
 set_target_properties(test_capture_thread PROPERTIES
+	RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+	AUTOMOC OFF
+	AUTOUIC OFF
+)
+
+set_target_properties(test_paddle_ocr_integration PROPERTIES
 	RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
 	AUTOMOC OFF
 	AUTOUIC OFF

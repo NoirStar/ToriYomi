@@ -1,7 +1,9 @@
 #pragma once
 
+#include "core/ocr/paddle/paddle_ocr_options.h"
 #include "ocr_engine.h"
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -11,6 +13,9 @@ namespace ocr {
 struct OcrBootstrapConfig {
     std::string paddleModelDirectory = "./models/paddleocr";
     std::string paddleLanguage = "jpn";
+    std::string paddleConfigPath;                  // JSON/YAML 설정 경로 (선택)
+    std::size_t paddlePipelineCount = 1;           // 앞으로 사용할 파이프라인 개수
+    std::optional<PaddleOcrOptions> overrideOptions;
 };
 
 class OcrEngineBootstrapper {

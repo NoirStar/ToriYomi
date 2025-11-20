@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/ocr/paddle/paddle_ocr_options.h"
 #include "ocr_engine.h"
 #include <memory>
 #include <mutex>
@@ -11,8 +12,6 @@ namespace ocr {
 
 /**
  * @brief PaddleOCR cpp_infer 백엔드를 IOcrEngine 인터페이스로 감싼 구현체입니다.
- *        프로젝트가 항상 Paddle Inference SDK를 링크하므로 조건부 빌드는 더 이상
- *        사용하지 않습니다.
  */
 class PaddleOcrWrapper : public IOcrEngine {
 public:
@@ -30,15 +29,20 @@ public:
      */
     std::string GetLastError() const;
 
+    /**
+     * @brief 고급 Paddle 옵션으로 직접 초기화 (Bootstrapper 전용)
+     */
+    bool InitializeWithOptions(const PaddleOcrOptions& options);
+
 private:
     std::vector<TextSegment> RunInference(const cv::Mat& image);
     void ResetRuntimeLocked();
 
     mutable std::mutex runtimeMutex_;
     bool initialized_ = false;
-    std::string modelDirectory_;
-    std::string language_ = "jpn";
     std::string lastError_;
+    bool hasActiveOptions_ = false;
+    PaddleOcrOptions activeOptions_;
 
     class Runtime;
     std::unique_ptr<Runtime> runtime_;
