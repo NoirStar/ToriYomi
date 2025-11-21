@@ -24,6 +24,8 @@ struct CaptureThread::Impl {
     std::unique_ptr<DxgiCapture> dxgiCapture;
     std::unique_ptr<GdiCapture> gdiCapture;
     bool usingDxgi{false};
+    int consecutiveCaptureFailures{0};
+    static constexpr int kMaxFailuresBeforeFallback = 60;
 
     // 통계
     std::atomic<uint64_t> totalFramesCaptured{0};
@@ -43,6 +45,8 @@ struct CaptureThread::Impl {
     bool HasFrameChanged(const cv::Mat& frame);
     void UpdateFps();
     cv::Mat CropToClientArea(const cv::Mat& frame) const;
+    void RegisterCaptureFailure();
+    void ResetCaptureFailureCounter();
 
     // FPS 계산용
     std::chrono::steady_clock::time_point fpsStartTime;
@@ -179,11 +183,24 @@ void CaptureThread::Impl::CaptureLoop() {
 }
 
 bool CaptureThread::Impl::CaptureFrame(cv::Mat& outFrame) {
+    if (!targetWindow || !IsWindow(targetWindow)) {
+        RegisterCaptureFailure();
+        return false;
+    }
+
+    if (IsIconic(targetWindow)) {
+        RegisterCaptureFailure();
+        return false;
+    }
+
     if (usingDxgi && dxgiCapture) {
         cv::Mat dxgiFrame = dxgiCapture->CaptureFrame();
         if (dxgiFrame.empty()) {
+            RegisterCaptureFailure();
             return false;
         }
+
+        ResetCaptureFailureCounter();
 
         cv::Mat clientFrame = CropToClientArea(dxgiFrame);
         if (!clientFrame.empty()) {
@@ -194,7 +211,13 @@ bool CaptureThread::Impl::CaptureFrame(cv::Mat& outFrame) {
         return !outFrame.empty();
     } else if (gdiCapture) {
         outFrame = gdiCapture->CaptureFrame();
-        return !outFrame.empty();
+        if (outFrame.empty()) {
+            RegisterCaptureFailure();
+            return false;
+        }
+
+        ResetCaptureFailureCounter();
+        return true;
     }
     return false;
 }
@@ -295,6 +318,30 @@ void CaptureThread::Impl::UpdateFps() {
         fpsFrameCount = 0;
         fpsStartTime = now;
     }
+}
+
+void CaptureThread::Impl::RegisterCaptureFailure() {
+    consecutiveCaptureFailures++;
+
+    if (usingDxgi && consecutiveCaptureFailures >= kMaxFailuresBeforeFallback) {
+        if (dxgiCapture) {
+            dxgiCapture->Shutdown();
+            dxgiCapture.reset();
+        }
+
+        gdiCapture = std::make_unique<GdiCapture>();
+        if (gdiCapture->Initialize(targetWindow)) {
+            usingDxgi = false;
+        } else {
+            gdiCapture.reset();
+        }
+
+        consecutiveCaptureFailures = 0;
+    }
+}
+
+void CaptureThread::Impl::ResetCaptureFailureCounter() {
+    consecutiveCaptureFailures = 0;
 }
 
 } // namespace toriyomi::capture

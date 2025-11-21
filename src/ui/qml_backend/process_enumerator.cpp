@@ -9,13 +9,36 @@ namespace toriyomi {
 namespace ui {
 
 namespace {
+bool IsWindowMinimized(HWND hwnd) {
+    WINDOWPLACEMENT placement;
+    placement.length = sizeof(WINDOWPLACEMENT);
+    if (GetWindowPlacement(hwnd, &placement)) {
+        if (placement.showCmd == SW_SHOWMINIMIZED || placement.showCmd == SW_SHOWMINNOACTIVE) {
+            return true;
+        }
+    }
+    return IsIconic(hwnd) != FALSE;
+}
+
 bool IsWindowCandidate(HWND hwnd) {
     if (!IsWindow(hwnd) || !IsWindowVisible(hwnd)) {
         return false;
     }
 
+    if (IsWindowMinimized(hwnd)) {
+        return false;
+    }
+
     wchar_t title[256] = {0};
     if (GetWindowTextW(hwnd, title, 256) == 0) {
+        return false;
+    }
+
+    RECT rect{};
+    if (!GetWindowRect(hwnd, &rect)) {
+        return false;
+    }
+    if ((rect.right - rect.left) <= 4 || (rect.bottom - rect.top) <= 4) {
         return false;
     }
 

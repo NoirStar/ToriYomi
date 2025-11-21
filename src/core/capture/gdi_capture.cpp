@@ -4,6 +4,10 @@
 #include "core/capture/gdi_capture.h"
 #include <Windows.h>
 
+#ifndef PW_RENDERFULLCONTENT
+#define PW_RENDERFULLCONTENT 0x00000002
+#endif
+
 namespace toriyomi::capture {
 
 // Pimpl 패턴으로 GDI 세부 구현 숨김
@@ -92,7 +96,12 @@ cv::Mat GdiCapture::CaptureFrame() {
     );
 
     if (!result) {
-        return cv::Mat();
+        UINT flags = PW_CLIENTONLY;
+        if (PrintWindow(pImpl_->targetWindow, pImpl_->memoryDC, flags | PW_RENDERFULLCONTENT) == FALSE) {
+            if (PrintWindow(pImpl_->targetWindow, pImpl_->memoryDC, flags) == FALSE) {
+                return cv::Mat();
+            }
+        }
     }
 
     // 비트맵 정보 구조체 설정
