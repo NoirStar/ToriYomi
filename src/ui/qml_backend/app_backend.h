@@ -126,6 +126,7 @@ private:
     HWND selectedWindow_ = nullptr;
     cv::Rect selectedRoi_;
     bool hasRoiSelection_ = false;
+    bool lastCaptureOccluded_ = false;
 
     // 파이프라인 컴포넌트
     std::shared_ptr<toriyomi::FrameQueue> frameQueue_;

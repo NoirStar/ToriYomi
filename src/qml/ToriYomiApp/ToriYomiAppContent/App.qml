@@ -70,7 +70,7 @@ Window {
                 
                 Text {
                     text: qsTr("ToriYomi - 일본어 학습 도구")
-                    color: "#fa9393"
+                    color: "#b8a8ff"
                     font.pixelSize: 16
                     font.family: "Maplestory OTF"
                     font.bold: true

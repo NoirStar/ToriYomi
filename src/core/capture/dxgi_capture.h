@@ -40,10 +40,12 @@ public:
      * @brief 대상으로부터 단일 프레임 캡처
      * 
      * 새 프레임이 사용 가능하거나 타임아웃(100ms)될 때까지 블로킹됩니다.
+     * 타임아웃 여부는 optional 파라미터로 확인할 수 있습니다.
      * 
+     * @param timedOut true가 설정되면 신규 프레임 없이 타임아웃된 상황
      * @return BGR 프레임이 담긴 cv::Mat, 실패/타임아웃 시 빈 Mat
      */
-    cv::Mat CaptureFrame();
+    cv::Mat CaptureFrame(bool* timedOut = nullptr);
 
     /**
      * @brief 모든 DXGI 리소스 종료 및 해제

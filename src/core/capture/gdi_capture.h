@@ -41,7 +41,7 @@ public:
     /**
      * @brief 대상으로부터 단일 프레임 캡처
      * 
-     * BitBlt를 사용하여 화면을 메모리 DC에 복사하고
+     * BitBlt 혹은 PrintWindow를 사용하여 화면을 메모리 DC에 복사하고
      * OpenCV Mat으로 변환합니다.
      * 
      * DXGI와 달리 항상 즉시 반환됩니다 (타임아웃 없음).
@@ -49,6 +49,14 @@ public:
      * @return BGR 프레임이 담긴 cv::Mat, 실패 시 빈 Mat
      */
     cv::Mat CaptureFrame();
+
+    /**
+     * @brief PrintWindow 기반 캡처를 우선 시도할지 여부 설정
+     *
+     * 다른 창에 가려진 상태에서도 원본 윈도우 콘텐츠를 캡처해야 하는 경우 true로 설정합니다.
+     * PrintWindow가 실패하면 자동으로 BitBlt로 폴백합니다.
+     */
+    void SetPreferPrintWindow(bool enable);
 
     /**
      * @brief 모든 GDI 리소스 해제

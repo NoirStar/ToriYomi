@@ -15,6 +15,8 @@
 #include <algorithm>
 #include <cmath>
 #include <exception>
+#include <chrono>
+#include <thread>
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -33,6 +35,62 @@
 #include "core/capture/gdi_capture.h"
 
 namespace {
+
+bool IsFrameNearlyBlack(const cv::Mat& frame) {
+    if (frame.empty()) {
+        return true;
+    }
+
+    cv::Scalar meanScalar;
+    cv::Scalar stddevScalar;
+    cv::meanStdDev(frame, meanScalar, stddevScalar);
+    const double maxMean = std::max({meanScalar[0], meanScalar[1], meanScalar[2]});
+    const double maxStdDev = std::max({stddevScalar[0], stddevScalar[1], stddevScalar[2]});
+    return maxMean < 2.5 && maxStdDev < 1.5;
+}
+
+bool IsPixmapNearlyBlack(const QPixmap& pixmap) {
+    if (pixmap.isNull()) {
+        return true;
+    }
+
+    QImage image = pixmap.toImage().convertToFormat(QImage::Format_ARGB32);
+    if (image.isNull()) {
+        return true;
+    }
+
+    const int width = image.width();
+    const int height = image.height();
+    if (width == 0 || height == 0) {
+        return true;
+    }
+
+    const int sampleStepX = std::max(1, width / 64);
+    const int sampleStepY = std::max(1, height / 64);
+    double accum = 0.0;
+    double accumStd = 0.0;
+    int samples = 0;
+
+    for (int y = 0; y < height; y += sampleStepY) {
+        const QRgb* row = reinterpret_cast<const QRgb*>(image.constScanLine(y));
+        for (int x = 0; x < width; x += sampleStepX) {
+            const QRgb pixel = row[x];
+            const double intensity = (qRed(pixel) + qGreen(pixel) + qBlue(pixel)) / 3.0;
+            accum += intensity;
+            accumStd += intensity * intensity;
+            ++samples;
+        }
+    }
+
+    if (samples == 0) {
+        return true;
+    }
+
+    const double mean = accum / samples;
+    const double variance = std::max(0.0, (accumStd / samples) - (mean * mean));
+    const double stddev = std::sqrt(variance);
+    return mean < 2.5 && stddev < 1.5;
+}
 
 QString CurrentTimestamp() {
     return QDateTime::currentDateTime().toString("HH:mm:ss");
@@ -128,6 +186,16 @@ cv::Mat CropFrameToClientArea(HWND target, const cv::Mat& frame) {
     }
 
     return frame(safe).clone();
+}
+
+void ForceWindowRefresh(HWND hwnd) {
+    if (!hwnd || !IsWindow(hwnd)) {
+        return;
+    }
+
+    const UINT redrawFlags = RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN | RDW_FRAME;
+    RedrawWindow(hwnd, nullptr, nullptr, redrawFlags);
+    SendMessageTimeout(hwnd, WM_NULL, 0, 0, SMTO_ABORTIFHUNG, 50, nullptr);
 }
 
 }
@@ -237,6 +305,12 @@ void AppBackend::selectProcess(int index) {
 
     selectedWindow_ = candidate;
     hasRoiSelection_ = false;
+
+    if (!previewImageData_.isEmpty() || previewImageSize_.isValid()) {
+        previewImageData_.clear();
+        previewImageSize_ = QSize();
+        emit previewImageDataChanged();
+    }
     refreshPreviewImage();
     
     wchar_t title[256] = {0};
@@ -787,6 +861,24 @@ void AppBackend::OnPollOcrResults() {
         return;
     }
 
+    if (captureThread_) {
+        const auto stats = captureThread_->GetStatistics();
+        if (stats.windowOccluded != lastCaptureOccluded_) {
+            lastCaptureOccluded_ = stats.windowOccluded;
+            if (stats.windowOccluded) {
+                emit logMessage(QString("[%1] 경고: 선택한 창이 다른 창에 가려져 정확한 화면을 캡처할 수 없습니다. 창을 화면 맨 앞으로 이동하거나 오버레이를 최소화해주세요.")
+                                 .arg(CurrentTimestamp()));
+                SetStatusMessage("창이 가려져 있습니다");
+            } else {
+                emit logMessage(QString("[%1] 안내: 선택한 창이 다시 보이는 상태입니다.")
+                                 .arg(CurrentTimestamp()));
+                SetStatusMessage("캡처 중...");
+            }
+        }
+    } else {
+        lastCaptureOccluded_ = false;
+    }
+
     const auto results = ocrThread_->GetLatestResults();
     auto logHook = [this](const QString& message) {
         emit logMessage(message);
@@ -1053,26 +1145,53 @@ QPixmap AppBackend::CaptureWindowPreview() const {
         return QPixmap();
     }
 
+    auto buildPixmapFromFrame = [&](cv::Mat frame, const char* tag) -> QPixmap {
+        if (frame.empty()) {
+            return QPixmap();
+        }
+        cv::Mat cropped = CropFrameToClientArea(target, frame);
+        if (!cropped.empty()) {
+            frame = std::move(cropped);
+        }
+        if (IsFrameNearlyBlack(frame)) {
+            qWarning() << "[AppBackend] 프리뷰 프레임이 거의 검정이라" << tag << "경로를 폐기합니다";
+            return QPixmap();
+        }
+        QPixmap pixmap = convertToPixmap(frame);
+        if (IsPixmapNearlyBlack(pixmap)) {
+            qWarning() << "[AppBackend] 프리뷰 픽스맵이 거의 검정이라" << tag << "경로를 폐기합니다";
+            return QPixmap();
+        }
+        return pixmap;
+    };
+
     // DXGI 기반 프리뷰 우선 시도 (GPU 가속 창 대응)
     capture::DxgiCapture dxgiPreview;
     if (dxgiPreview.Initialize(target)) {
-        cv::Mat frame = dxgiPreview.CaptureFrame();
-        dxgiPreview.Shutdown();
-        cv::Mat cropped = CropFrameToClientArea(target, frame);
-        if (!cropped.empty()) {
-            QPixmap pix = convertToPixmap(cropped);
-            if (!pix.isNull()) {
-                return pix;
+        const int kMaxDxgiAttempts = 3;
+        for (int attempt = 0; attempt < kMaxDxgiAttempts; ++attempt) {
+            ForceWindowRefresh(target);
+            cv::Mat frame = dxgiPreview.CaptureFrame();
+            if (!frame.empty()) {
+                QPixmap pix = buildPixmapFromFrame(std::move(frame), "DXGI");
+                if (!pix.isNull()) {
+                    dxgiPreview.Shutdown();
+                    return pix;
+                }
             }
+            std::this_thread::sleep_for(std::chrono::milliseconds(35));
         }
+        dxgiPreview.Shutdown();
     }
 
     // DXGI 실패 시 GDI 폴백
     capture::GdiCapture previewCapture;
+    previewCapture.SetPreferPrintWindow(target != GetDesktopWindow());
     if (previewCapture.Initialize(target)) {
+        ForceWindowRefresh(target);
         cv::Mat frame = previewCapture.CaptureFrame();
         previewCapture.Shutdown();
-        QPixmap pix = convertToPixmap(frame);
+        QPixmap pix = buildPixmapFromFrame(std::move(frame), "GDI");
         if (!pix.isNull()) {
             return pix;
         }
@@ -1102,6 +1221,8 @@ QPixmap AppBackend::CaptureWindowPreview() const {
         screen = screens.front();
     }
 
+    ForceWindowRefresh(target);
+
     QPixmap pixmap;
     if (target == GetDesktopWindow()) {
         pixmap = screen->grabWindow(0);
@@ -1109,6 +1230,11 @@ QPixmap AppBackend::CaptureWindowPreview() const {
         pixmap = screen->grabWindow(reinterpret_cast<WId>(target));
     }
     if (pixmap.isNull()) {
+        return pixmap;
+    }
+
+    if (IsPixmapNearlyBlack(pixmap)) {
+        qWarning() << "[AppBackend] QScreen 기반 캡처도 거의 검정입니다";
         return pixmap;
     }
 

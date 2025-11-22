@@ -2,11 +2,40 @@
 // GDI BitBlt를 사용한 폴백 화면 캡처
 
 #include "core/capture/gdi_capture.h"
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <Windows.h>
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
+#include <algorithm>
+#include <cmath>
+#include <vector>
 
 #ifndef PW_RENDERFULLCONTENT
 #define PW_RENDERFULLCONTENT 0x00000002
 #endif
+
+namespace {
+
+bool IsFrameNearlyBlack(const cv::Mat& frame) {
+    if (frame.empty()) {
+        return true;
+    }
+
+    cv::Scalar meanScalar;
+    cv::Scalar stddevScalar;
+    cv::meanStdDev(frame, meanScalar, stddevScalar);
+    const double maxMean = std::max({meanScalar[0], meanScalar[1], meanScalar[2]});
+    const double maxStdDev = std::max({stddevScalar[0], stddevScalar[1], stddevScalar[2]});
+    return maxMean < 2.5 && maxStdDev < 1.5;
+}
+
+} // namespace
 
 namespace toriyomi::capture {
 
@@ -14,6 +43,7 @@ namespace toriyomi::capture {
 struct GdiCapture::Impl {
     HWND targetWindow{nullptr};
     bool initialized{false};
+    bool preferPrintWindow{false};
 
     // GDI 핸들
     HDC windowDC{nullptr};      // 윈도우 DC
@@ -83,61 +113,120 @@ cv::Mat GdiCapture::CaptureFrame() {
         return cv::Mat();
     }
 
-    // BitBlt로 화면 복사
-    // windowDC의 내용을 memoryDC의 비트맵으로 복사
-    BOOL result = BitBlt(
-        pImpl_->memoryDC,       // 대상 DC
-        0, 0,                   // 대상 좌표
-        pImpl_->width,          // 너비
-        pImpl_->height,         // 높이
-        pImpl_->windowDC,       // 소스 DC
-        0, 0,                   // 소스 좌표
-        SRCCOPY                 // 래스터 연산 (직접 복사)
-    );
+    auto tryBitBlt = [this]() -> bool {
+        return BitBlt(
+            pImpl_->memoryDC,
+            0,
+            0,
+            pImpl_->width,
+            pImpl_->height,
+            pImpl_->windowDC,
+            0,
+            0,
+            SRCCOPY
+        );
+    };
 
-    if (!result) {
+    auto tryPrintWindow = [this](bool requestFullContent) -> bool {
+        if (!pImpl_->targetWindow || pImpl_->targetWindow == GetDesktopWindow()) {
+            return false;
+        }
+
         UINT flags = PW_CLIENTONLY;
-        if (PrintWindow(pImpl_->targetWindow, pImpl_->memoryDC, flags | PW_RENDERFULLCONTENT) == FALSE) {
-            if (PrintWindow(pImpl_->targetWindow, pImpl_->memoryDC, flags) == FALSE) {
-                return cv::Mat();
+        if (requestFullContent) {
+            flags |= PW_RENDERFULLCONTENT;
+        }
+
+        if (PrintWindow(pImpl_->targetWindow, pImpl_->memoryDC, flags) != FALSE) {
+            return true;
+        }
+
+        if (requestFullContent) {
+            return PrintWindow(pImpl_->targetWindow, pImpl_->memoryDC, PW_CLIENTONLY) != FALSE;
+        }
+
+        return false;
+    };
+
+    const bool canUsePrintWindow = pImpl_->targetWindow && pImpl_->targetWindow != GetDesktopWindow();
+
+    bool lastCaptureUsedPrintWindow = false;
+
+    auto captureWithBitBlt = [&]() -> bool {
+        lastCaptureUsedPrintWindow = false;
+        return tryBitBlt();
+    };
+
+    auto captureWithPrintWindow = [&]() -> bool {
+        lastCaptureUsedPrintWindow = true;
+        return tryPrintWindow(true);
+    };
+
+    auto extractCapturedFrame = [&]() -> cv::Mat {
+        BITMAPINFOHEADER bi{};
+        bi.biSize = sizeof(BITMAPINFOHEADER);
+        bi.biWidth = pImpl_->width;
+        bi.biHeight = -pImpl_->height;
+        bi.biPlanes = 1;
+        bi.biBitCount = 32;
+        bi.biCompression = BI_RGB;
+
+        std::vector<uint8_t> buffer(static_cast<size_t>(pImpl_->width) * static_cast<size_t>(pImpl_->height) * 4);
+        int scanLines = GetDIBits(
+            pImpl_->memoryDC,
+            pImpl_->bitmap,
+            0,
+            pImpl_->height,
+            buffer.data(),
+            reinterpret_cast<BITMAPINFO*>(&bi),
+            DIB_RGB_COLORS
+        );
+
+        if (scanLines == 0) {
+            return cv::Mat();
+        }
+
+        cv::Mat bgraFrame(pImpl_->height, pImpl_->width, CV_8UC4, buffer.data());
+        cv::Mat bgrFrame;
+        cv::cvtColor(bgraFrame, bgrFrame, cv::COLOR_BGRA2BGR);
+
+        if (lastCaptureUsedPrintWindow && IsFrameNearlyBlack(bgrFrame)) {
+            return cv::Mat();
+        }
+
+        return bgrFrame.clone();
+    };
+
+    auto captureAndExtract = [&](auto captureFunc) -> cv::Mat {
+        if (!captureFunc()) {
+            return cv::Mat();
+        }
+        return extractCapturedFrame();
+    };
+
+    cv::Mat frame;
+    if (pImpl_->preferPrintWindow && canUsePrintWindow) {
+        frame = captureAndExtract(captureWithPrintWindow);
+        if (frame.empty()) {
+            frame = captureAndExtract(captureWithBitBlt);
+        }
+    } else {
+        frame = captureAndExtract(captureWithBitBlt);
+        if (frame.empty() && canUsePrintWindow) {
+            frame = captureAndExtract(captureWithPrintWindow);
+            if (frame.empty()) {
+                frame = captureAndExtract(captureWithBitBlt);
             }
         }
     }
 
-    // 비트맵 정보 구조체 설정
-    BITMAPINFOHEADER bi{};
-    bi.biSize = sizeof(BITMAPINFOHEADER);
-    bi.biWidth = pImpl_->width;
-    bi.biHeight = -pImpl_->height;  // 음수 = top-down 비트맵 (OpenCV 호환)
-    bi.biPlanes = 1;
-    bi.biBitCount = 32;             // 32비트 BGRA
-    bi.biCompression = BI_RGB;
+    return frame;
+}
 
-    // 비트맵 데이터를 저장할 버퍼 생성
-    std::vector<uint8_t> buffer(pImpl_->width * pImpl_->height * 4);
-
-    // GetDIBits로 비트맵 데이터 추출
-    int scanLines = GetDIBits(
-        pImpl_->memoryDC,
-        pImpl_->bitmap,
-        0,
-        pImpl_->height,
-        buffer.data(),
-        reinterpret_cast<BITMAPINFO*>(&bi),
-        DIB_RGB_COLORS
-    );
-
-    if (scanLines == 0) {
-        return cv::Mat();
+void GdiCapture::SetPreferPrintWindow(bool enable) {
+    if (pImpl_) {
+        pImpl_->preferPrintWindow = enable;
     }
-
-    // OpenCV Mat 생성 (BGRA → BGR 변환)
-    cv::Mat bgraFrame(pImpl_->height, pImpl_->width, CV_8UC4, buffer.data());
-    cv::Mat bgrFrame;
-    cv::cvtColor(bgraFrame, bgrFrame, cv::COLOR_BGRA2BGR);
-
-    // 깊은 복사 (buffer가 파괴되기 전에)
-    return bgrFrame.clone();
 }
 
 void GdiCapture::Shutdown() {

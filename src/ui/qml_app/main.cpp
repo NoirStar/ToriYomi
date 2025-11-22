@@ -9,6 +9,12 @@
 #include <windows.h>
 #include <io.h>
 #include <fcntl.h>
+#ifndef DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+#define DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 ((DPI_AWARENESS_CONTEXT)-4)
+#endif
+#ifndef DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE
+#define DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE ((DPI_AWARENESS_CONTEXT)-3)
+#endif
 #endif
 
 #include "ui/qml_backend/app_backend.h"
@@ -38,10 +44,54 @@ static void EnableConsoleOutput() {
 #endif
 }
 
+#ifdef _WIN32
+static void ConfigureDpiAwareness() {
+    using SetProcessDpiAwarenessContextFn = BOOL (WINAPI*)(DPI_AWARENESS_CONTEXT);
+    using SetProcessDpiAwarenessFn = HRESULT (WINAPI*)(int);
+    using SetProcessDPIAwareFn = BOOL (WINAPI*)();
+
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    if (user32) {
+        auto setContext = reinterpret_cast<SetProcessDpiAwarenessContextFn>(
+            GetProcAddress(user32, "SetProcessDpiAwarenessContext"));
+        if (setContext) {
+            if (setContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) ||
+                setContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE)) {
+                return;
+            }
+        }
+    }
+
+    HMODULE shcore = LoadLibraryW(L"shcore.dll");
+    if (shcore) {
+        auto setProcessDpiAwareness = reinterpret_cast<SetProcessDpiAwarenessFn>(
+            GetProcAddress(shcore, "SetProcessDpiAwareness"));
+        constexpr int kPerMonitorAwareValue = 2; // PROCESS_PER_MONITOR_DPI_AWARE
+        if (setProcessDpiAwareness &&
+            SUCCEEDED(setProcessDpiAwareness(kPerMonitorAwareValue))) {
+            FreeLibrary(shcore);
+            return;
+        }
+        FreeLibrary(shcore);
+    }
+
+    if (user32) {
+        auto setProcessDpiAware = reinterpret_cast<SetProcessDPIAwareFn>(
+            GetProcAddress(user32, "SetProcessDPIAware"));
+        if (setProcessDpiAware) {
+            setProcessDpiAware();
+        }
+    }
+}
+#endif
+
 int main(int argc, char *argv[])
 {
     // 콘솔 출력 활성화
     EnableConsoleOutput();
+#ifdef _WIN32
+    ConfigureDpiAwareness();
+#endif
     
     printf("[INIT] ToriYomi 시작...\n");
 

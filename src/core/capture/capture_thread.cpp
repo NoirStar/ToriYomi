@@ -4,10 +4,30 @@
 #include "core/capture/capture_thread.h"
 #include "core/capture/dxgi_capture.h"
 #include "core/capture/gdi_capture.h"
+#include "common/windows/window_visibility.h"
 #include <thread>
 #include <chrono>
 #include <atomic>
 #include <algorithm>
+#include <cmath>
+#include <opencv2/imgproc.hpp>
+
+namespace {
+
+bool IsFrameNearlyBlack(const cv::Mat& frame) {
+    if (frame.empty()) {
+        return true;
+    }
+
+    cv::Scalar meanScalar;
+    cv::Scalar stddevScalar;
+    cv::meanStdDev(frame, meanScalar, stddevScalar);
+    const double maxMean = std::max({meanScalar[0], meanScalar[1], meanScalar[2]});
+    const double maxStdDev = std::max({stddevScalar[0], stddevScalar[1], stddevScalar[2]});
+    return maxMean < 2.5 && maxStdDev < 1.5;
+}
+
+}
 
 namespace toriyomi::capture {
 
@@ -26,6 +46,9 @@ struct CaptureThread::Impl {
     bool usingDxgi{false};
     int consecutiveCaptureFailures{0};
     static constexpr int kMaxFailuresBeforeFallback = 60;
+    bool preferPrintWindowCapture{false};
+    std::atomic<bool> windowOccluded{false};
+    std::atomic<uint64_t> occludedFrameCount{0};
 
     // 통계
     std::atomic<uint64_t> totalFramesCaptured{0};
@@ -40,17 +63,20 @@ struct CaptureThread::Impl {
     HWND targetWindow{nullptr};
 
     void CaptureLoop();
-    bool InitializeCapture();
     bool CaptureFrame(cv::Mat& outFrame);
     bool HasFrameChanged(const cv::Mat& frame);
     void UpdateFps();
     cv::Mat CropToClientArea(const cv::Mat& frame) const;
     void RegisterCaptureFailure();
     void ResetCaptureFailureCounter();
+    bool InitializeDxgiCapture();
+    bool InitializeGdiCapture(bool preferPrintWindow);
+    bool IsWindowCovered() const;
 
     // FPS 계산용
     std::chrono::steady_clock::time_point fpsStartTime;
     uint64_t fpsFrameCount{0};
+    bool lastCaptureTimedOut{false};
 };
 
 CaptureThread::CaptureThread(std::shared_ptr<FrameQueue> frameQueue)
@@ -73,20 +99,28 @@ bool CaptureThread::Start(HWND targetWindow) {
 
     pImpl_->targetWindow = targetWindow;
     pImpl_->stopRequested = false;
-    
-    // DXGI 먼저 시도
-    pImpl_->dxgiCapture = std::make_unique<DxgiCapture>();
-    if (pImpl_->dxgiCapture->Initialize(targetWindow)) {
-        pImpl_->usingDxgi = true;
-    } else {
-        // DXGI 실패 시 GDI로 폴백
+
+    const bool targetIsDesktop = (targetWindow == GetDesktopWindow());
+    pImpl_->preferPrintWindowCapture = !targetIsDesktop;
+
+    bool captureInitialized = false;
+
+    if (!targetIsDesktop) {
+        captureInitialized = pImpl_->InitializeGdiCapture(true);
+    }
+
+    if (!captureInitialized) {
+        captureInitialized = pImpl_->InitializeDxgiCapture();
+    }
+
+    if (!captureInitialized && targetIsDesktop) {
+        captureInitialized = pImpl_->InitializeGdiCapture(false);
+    }
+
+    if (!captureInitialized) {
         pImpl_->dxgiCapture.reset();
-        pImpl_->gdiCapture = std::make_unique<GdiCapture>();
-        if (!pImpl_->gdiCapture->Initialize(targetWindow)) {
-            pImpl_->gdiCapture.reset();
-            return false;
-        }
-        pImpl_->usingDxgi = false;
+        pImpl_->gdiCapture.reset();
+        return false;
     }
 
     // 스레드 시작
@@ -146,6 +180,7 @@ CaptureStatistics CaptureThread::GetStatistics() const {
     stats.framesSkipped = pImpl_->framesSkipped;
     stats.currentFps = pImpl_->currentFps;
     stats.usingDxgi = pImpl_->usingDxgi;
+    stats.windowOccluded = pImpl_->windowOccluded;
     return stats;
 }
 
@@ -159,8 +194,10 @@ void CaptureThread::Impl::CaptureLoop() {
         bool captured = CaptureFrame(frame);
         
         if (!captured || frame.empty()) {
-            // 캡처 실패 - 짧은 대기 후 재시도
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            const int waitMs = lastCaptureTimedOut
+                ? std::max(1, captureIntervalMs.load())
+                : 10;
+            std::this_thread::sleep_for(std::chrono::milliseconds(waitMs));
             continue;
         }
 
@@ -183,9 +220,19 @@ void CaptureThread::Impl::CaptureLoop() {
 }
 
 bool CaptureThread::Impl::CaptureFrame(cv::Mat& outFrame) {
+    lastCaptureTimedOut = false;
+
     if (!targetWindow || !IsWindow(targetWindow)) {
         RegisterCaptureFailure();
         return false;
+    }
+
+    const bool occluded = IsWindowCovered();
+    windowOccluded = occluded;
+    if (occluded) {
+        occludedFrameCount++;
+    } else {
+        occludedFrameCount = 0;
     }
 
     if (IsIconic(targetWindow)) {
@@ -193,8 +240,18 @@ bool CaptureThread::Impl::CaptureFrame(cv::Mat& outFrame) {
         return false;
     }
 
+    if (occluded && usingDxgi && targetWindow != GetDesktopWindow()) {
+        RegisterCaptureFailure();
+        return false;
+    }
+
     if (usingDxgi && dxgiCapture) {
-        cv::Mat dxgiFrame = dxgiCapture->CaptureFrame();
+        bool timedOut = false;
+        cv::Mat dxgiFrame = dxgiCapture->CaptureFrame(&timedOut);
+        if (timedOut) {
+            lastCaptureTimedOut = true;
+            return false;
+        }
         if (dxgiFrame.empty()) {
             RegisterCaptureFailure();
             return false;
@@ -208,7 +265,17 @@ bool CaptureThread::Impl::CaptureFrame(cv::Mat& outFrame) {
         } else {
             outFrame = std::move(dxgiFrame);
         }
-        return !outFrame.empty();
+        if (outFrame.empty()) {
+            RegisterCaptureFailure();
+            return false;
+        }
+
+        if (IsFrameNearlyBlack(outFrame)) {
+            RegisterCaptureFailure();
+            return false;
+        }
+
+        return true;
     } else if (gdiCapture) {
         outFrame = gdiCapture->CaptureFrame();
         if (outFrame.empty()) {
@@ -217,9 +284,21 @@ bool CaptureThread::Impl::CaptureFrame(cv::Mat& outFrame) {
         }
 
         ResetCaptureFailureCounter();
+        if (IsFrameNearlyBlack(outFrame)) {
+            RegisterCaptureFailure();
+            return false;
+        }
         return true;
     }
     return false;
+}
+
+bool CaptureThread::Impl::IsWindowCovered() const {
+    if (!targetWindow || targetWindow == GetDesktopWindow()) {
+        return false;
+    }
+
+    return toriyomi::win::HasSignificantOcclusion(targetWindow, 0.2);
 }
 
 cv::Mat CaptureThread::Impl::CropToClientArea(const cv::Mat& frame) const {
@@ -329,19 +408,46 @@ void CaptureThread::Impl::RegisterCaptureFailure() {
             dxgiCapture.reset();
         }
 
-        gdiCapture = std::make_unique<GdiCapture>();
-        if (gdiCapture->Initialize(targetWindow)) {
-            usingDxgi = false;
+        if (InitializeGdiCapture(preferPrintWindowCapture)) {
+            consecutiveCaptureFailures = 0;
         } else {
             gdiCapture.reset();
         }
+    } else if (!usingDxgi && gdiCapture && consecutiveCaptureFailures >= kMaxFailuresBeforeFallback) {
+        gdiCapture->Shutdown();
+        gdiCapture.reset();
 
-        consecutiveCaptureFailures = 0;
+        if (InitializeDxgiCapture()) {
+            consecutiveCaptureFailures = 0;
+        } else {
+            dxgiCapture.reset();
+        }
     }
 }
 
 void CaptureThread::Impl::ResetCaptureFailureCounter() {
     consecutiveCaptureFailures = 0;
+}
+
+bool CaptureThread::Impl::InitializeDxgiCapture() {
+    dxgiCapture = std::make_unique<DxgiCapture>();
+    if (!dxgiCapture->Initialize(targetWindow)) {
+        dxgiCapture.reset();
+        return false;
+    }
+    usingDxgi = true;
+    return true;
+}
+
+bool CaptureThread::Impl::InitializeGdiCapture(bool preferPrintWindow) {
+    gdiCapture = std::make_unique<GdiCapture>();
+    gdiCapture->SetPreferPrintWindow(preferPrintWindow);
+    if (!gdiCapture->Initialize(targetWindow)) {
+        gdiCapture.reset();
+        return false;
+    }
+    usingDxgi = false;
+    return true;
 }
 
 } // namespace toriyomi::capture

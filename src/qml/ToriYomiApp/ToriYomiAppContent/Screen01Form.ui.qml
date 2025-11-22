@@ -37,13 +37,13 @@ Rectangle {
         onClicked: screen01Form.showDebugLog = true
         
         background: Rectangle {
-            color: debugButton.pressed ? "#8a7ac7" : (debugButton.hovered ? "#a88aff" : "#9a7aff")
-            radius: 20
-            border.color: "#ffffff"
-            border.width: debugButton.hovered ? 2 : 0
+            color: debugButton.pressed ? Qt.rgba(0.25, 0.24, 0.28, 0.9) : (debugButton.hovered ? Qt.rgba(0.32, 0.31, 0.35, 0.85) : Qt.rgba(0.28, 0.27, 0.31, 0.75))
+            radius: 25
+            border.color: Qt.rgba(1, 1, 1, 0.2)
+            border.width: 1
             
             Behavior on color {
-                ColorAnimation { duration: 150 }
+                ColorAnimation { duration: 200 }
             }
         }
         
@@ -144,10 +144,10 @@ Rectangle {
             width: parent.width
             height: parent.height * 0.55
             visible: true
-            color: "#00ffffff"
-            radius: 25
-            border.color: "#3d3d3d"
-            border.width: 2
+            color: Qt.rgba(0.15, 0.14, 0.18, 0.6)
+            radius: 16
+            border.color: Qt.rgba(1, 1, 1, 0.12)
+            border.width: 1
 
             ListView {
                 id: sentencesListView
@@ -167,10 +167,14 @@ Rectangle {
 
                     Rectangle {
                         anchors.fill: parent
-                        radius: 14
-                        color: selected ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(1, 1, 1, 0.0)
-                        border.color: selected ? "#fa9393" : "transparent"
-                        border.width: selected ? 1 : 0
+                        radius: 10
+                        color: selected ? Qt.rgba(0.4, 0.35, 0.45, 0.25) : Qt.rgba(1, 1, 1, 0.0)
+                        border.color: selected ? "#c77da8" : "transparent"
+                        border.width: selected ? 2 : 0
+                        
+                        Behavior on color {
+                            ColorAnimation { duration: 200 }
+                        }
                     }
 
                     Row {
@@ -220,10 +224,10 @@ Rectangle {
                 width: parent.width * 0.6 // 60% 너비
                 height: parent.height
                 opacity: 1
-                color: "#00ffffff"
-                radius: 25
-                border.color: "#3d3d3d"
-                border.width: 2
+                color: Qt.rgba(0.15, 0.14, 0.18, 0.6)
+                radius: 16
+                border.color: Qt.rgba(1, 1, 1, 0.12)
+                border.width: 1
 
                 ScrollView {
                     id: scrollView
@@ -239,12 +243,12 @@ Rectangle {
                             id: tokenRepeater
                             model: tokenListModel
 
-                            delegate: Rectangle {
+                                delegate: Rectangle {
                                 width: tokenColumn.width
                                 height: 48
-                                radius: 8
-                                color: Qt.rgba(1, 1, 1, 0.05)
-                                border.color: "#3d3d3d"
+                                radius: 10
+                                color: Qt.rgba(0.2, 0.19, 0.23, 0.4)
+                                border.color: Qt.rgba(1, 1, 1, 0.08)
                                 border.width: 1
 
                                 Row {
@@ -307,13 +311,13 @@ Rectangle {
                     font.bold: true
                     
                     background: Rectangle {
-                        color: button1.pressed ? "#8a7ac7" : (button1.hovered ? "#a88aff" : "#9a7aff")
-                        radius: 8
-                        border.color: "#ffffff"
-                        border.width: button1.hovered ? 2 : 0
+                        color: button1.pressed ? Qt.rgba(0.28, 0.35, 0.45, 0.9) : (button1.hovered ? Qt.rgba(0.32, 0.40, 0.52, 0.85) : Qt.rgba(0.25, 0.32, 0.42, 0.75))
+                        radius: 12
+                        border.color: Qt.rgba(1, 1, 1, 0.12)
+                        border.width: 1
                         
                         Behavior on color {
-                            ColorAnimation { duration: 150 }
+                            ColorAnimation { duration: 200 }
                         }
                     }
                     
@@ -332,10 +336,10 @@ Rectangle {
                 id: gridBox
                 width: parent.width * 0.4 - 10 // 40% 너비 (spacing 고려)
                 height: parent.height
-                color: "#00ffffff"
-                radius: 25
-                border.color: "#3d3d3d"
-                border.width: 2
+                color: Qt.rgba(0.15, 0.14, 0.18, 0.6)
+                radius: 16
+                border.color: Qt.rgba(1, 1, 1, 0.12)
+                border.width: 1
 
                 // GridView 내부를 Column으로 정리
                 Column {
@@ -352,7 +356,7 @@ Rectangle {
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                         font.family: "Maplestory OTF"
-                        color: "#ffffff"
+                        color: "#ffb3d9"
                     }
 
                     RowLayout {
@@ -370,9 +374,9 @@ Rectangle {
                             Component.onCompleted: comboBox.currentIndex = -1
 
                             background: Rectangle {
-                                radius: 18
-                                color: comboBox.enabled ? "#2c2a33" : "#1f1c27"
-                                border.color: comboBox.activeFocus ? "#6b5fb3" : "#3a3844"
+                                radius: 12
+                                color: comboBox.enabled ? "#2a2835" : "#1f1c27"
+                                border.color: comboBox.activeFocus ? "#876bb8" : Qt.rgba(1, 1, 1, 0.08)
                                 border.width: comboBox.activeFocus ? 2 : 1
                             }
 
@@ -395,31 +399,22 @@ Rectangle {
                             Layout.preferredWidth: 55
                             Layout.preferredHeight: 50
                             text: "⟳"
-                            font.bold: true
-                            font.family: "Maplestory OTF"
-                            font.pixelSize: 22
+                            font.bold: false
+                            font.family: "Segoe UI Symbol"
+                            font.pixelSize: 24
                             focusPolicy: Qt.NoFocus
                             enabled: !appBackend.isCapturing
                             opacity: enabled ? 1 : 0.4
                             hoverEnabled: true
 
-                            function triggerSpin() {
-                                refreshSpin.stop()
-                                refreshIcon.rotation = 0
-                                refreshSpin.start()
-                            }
-
-                            onHoveredChanged: if (hovered) triggerSpin()
-                            onPressed: triggerSpin()
-
                             background: Rectangle {
-                                color: processRefreshButton.pressed ? "#8a7ac7" : (processRefreshButton.hovered ? "#a88aff" : "#9a7aff")
-                                radius: 20
-                                border.color: "#ffffff"
-                                border.width: processRefreshButton.hovered ? 2 : 0
+                                color: processRefreshButton.pressed ? Qt.rgba(0.25, 0.24, 0.28, 0.9) : (processRefreshButton.hovered ? Qt.rgba(0.28, 0.27, 0.31, 0.8) : Qt.rgba(0.22, 0.21, 0.25, 0.7))
+                                radius: 12
+                                border.color: Qt.rgba(1, 1, 1, 0.1)
+                                border.width: 1
 
                                 Behavior on color {
-                                    ColorAnimation { duration: 150 }
+                                    ColorAnimation { duration: 200 }
                                 }
                             }
 
@@ -431,13 +426,17 @@ Rectangle {
                                     anchors.centerIn: parent
                                     text: processRefreshButton.text
                                     font.pixelSize: processRefreshButton.font.pixelSize
-                                    font.family: "Maplestory OTF"
-                                    color: "#ffffff"
+                                    font.family: processRefreshButton.font.family
+                                    color: processRefreshButton.hovered ? "#ffffff" : "#d0d0d0"
                                     transformOrigin: Item.Center
-                                    scale: processRefreshButton.pressed ? 0.85 : 1.0
+                                    scale: processRefreshButton.pressed ? 0.9 : 1.0
 
                                     Behavior on scale {
-                                        NumberAnimation { duration: 120; easing.type: Easing.OutQuad }
+                                        NumberAnimation { duration: 100; easing.type: Easing.OutQuad }
+                                    }
+                                    
+                                    Behavior on color {
+                                        ColorAnimation { duration: 200 }
                                     }
                                 }
 
@@ -447,10 +446,10 @@ Rectangle {
                                     property: "rotation"
                                     from: 0
                                     to: 360
-                                    duration: 500
+                                    duration: 600
                                     loops: 1
-                                    running: false
-                                    onFinished: refreshIcon.rotation = 0
+                                    running: processRefreshButton.pressed
+                                    easing.type: Easing.OutCubic
                                 }
                             }
                         }
@@ -510,13 +509,13 @@ Rectangle {
                                 onClicked: screen01Form.showRegionSelector = true
 
                                 background: Rectangle {
-                                    color: captureRegionButton.pressed ? "#c75a7a" : (captureRegionButton.hovered ? "#e67799" : "#d66b88")
-                                    radius: 8
-                                    border.color: "#ffffff"
-                                    border.width: captureRegionButton.hovered ? 2 : 0
+                                    color: captureRegionButton.pressed ? Qt.rgba(0.35, 0.30, 0.42, 0.9) : (captureRegionButton.hovered ? Qt.rgba(0.42, 0.37, 0.50, 0.85) : Qt.rgba(0.38, 0.33, 0.46, 0.75))
+                                    radius: 12
+                                    border.color: Qt.rgba(1, 1, 1, 0.15)
+                                    border.width: 1
 
                                     Behavior on color {
-                                        ColorAnimation { duration: 150 }
+                                        ColorAnimation { duration: 200 }
                                     }
                                 }
 
@@ -543,13 +542,13 @@ Rectangle {
                                 opacity: enabled ? 1 : 0.4
 
                                 background: Rectangle {
-                                    color: startButton.checked ? "#e74c3c" : (startButton.pressed ? "#27ae60" : (startButton.hovered ? "#3fca7a" : "#2ecc71"))
-                                    radius: 8
-                                    border.color: "#ffffff"
-                                    border.width: startButton.hovered ? 2 : 0
+                                    color: startButton.checked ? Qt.rgba(0.82, 0.28, 0.22, 0.9) : (startButton.pressed ? Qt.rgba(0.15, 0.58, 0.28, 0.95) : (startButton.hovered ? Qt.rgba(0.18, 0.68, 0.35, 0.9) : Qt.rgba(0.15, 0.62, 0.32, 0.85)))
+                                    radius: 12
+                                    border.color: Qt.rgba(1, 1, 1, 0.15)
+                                    border.width: 1
 
                                     Behavior on color {
-                                        ColorAnimation { duration: 150 }
+                                        ColorAnimation { duration: 200 }
                                     }
                                 }
 

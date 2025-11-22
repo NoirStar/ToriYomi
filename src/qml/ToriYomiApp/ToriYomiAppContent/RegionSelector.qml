@@ -59,6 +59,12 @@ Window {
             selectedRegion = Qt.rect(0, 0, 0, 0)
             dragStart = Qt.point(0, 0)
             console.log("RegionSelector: Reset state")
+            if (!appBackend.previewImageData || appBackend.previewImageData.length === 0) {
+                appBackend.refreshPreviewImage()
+            }
+            previewRetryTimer.running = true
+        } else {
+            previewRetryTimer.running = false
         }
     }
     
@@ -226,6 +232,34 @@ Window {
                 source: appBackend.previewImageData
                 opacity: 1.0
             }
+
+            Rectangle {
+                anchors.fill: parent
+                color: Qt.rgba(0.05, 0.05, 0.07, 0.95)
+                visible: !appBackend.previewImageData || appBackend.previewImageData.length === 0
+                z: 2
+
+                Column {
+                    anchors.centerIn: parent
+                    spacing: 8
+                    Text {
+                        text: qsTr("미리보기를 불러오는 중...")
+                        color: "#ffffff"
+                        font.pixelSize: 16
+                        font.family: "Maplestory OTF"
+                        horizontalAlignment: Text.AlignHCenter
+                    }
+                    Text {
+                        text: qsTr("화면 업데이트가 필요한 경우 대상 창을 한 번 움직여 주세요")
+                        color: Qt.rgba(1, 1, 1, 0.75)
+                        font.pixelSize: 13
+                        font.family: "Maplestory OTF"
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.WrapAnywhere
+                        width: parent.width * 0.8
+                    }
+                }
+            }
             
             // 선택 영역 표시
             Rectangle {
@@ -328,7 +362,25 @@ Window {
             }
         }
         }
-    
+
+    Timer {
+        id: previewRetryTimer
+        interval: 350
+        repeat: true
+        running: false
+        onTriggered: {
+            if (!regionSelector.visible) {
+                previewRetryTimer.running = false
+                return
+            }
+            if (appBackend.previewImageData && appBackend.previewImageData.length > 0) {
+                previewRetryTimer.running = false
+                return
+            }
+            appBackend.refreshPreviewImage()
+        }
+    }
+
     // ESC 키로 취소
     Shortcut {
         sequence: "Escape"

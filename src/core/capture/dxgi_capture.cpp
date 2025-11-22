@@ -84,9 +84,13 @@ bool DxgiCapture::Initialize(HWND targetWindow) {
     return true;
 }
 
-cv::Mat DxgiCapture::CaptureFrame() {
+cv::Mat DxgiCapture::CaptureFrame(bool* timedOut) {
     if (!pImpl_->initialized) {
         return cv::Mat();
+    }
+
+    if (timedOut) {
+        *timedOut = false;
     }
 
     ComPtr<IDXGIResource> desktopResource;
@@ -102,7 +106,9 @@ cv::Mat DxgiCapture::CaptureFrame() {
     if (FAILED(hr)) {
         // 타임아웃이나 에러 - 빈 Mat 반환
         if (hr == DXGI_ERROR_WAIT_TIMEOUT) {
-            // 타임아웃은 정상 (화면 변경 없음)
+            if (timedOut) {
+                *timedOut = true;
+            }
             return cv::Mat();
         }
         

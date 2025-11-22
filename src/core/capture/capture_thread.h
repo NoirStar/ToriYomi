@@ -28,6 +28,7 @@ struct CaptureStatistics {
     uint64_t framesSkipped{0};        // 스킵된 프레임 수 (중복)
     double currentFps{0.0};           // 현재 FPS
     bool usingDxgi{false};            // DXGI 사용 여부 (false면 GDI)
+    bool windowOccluded{false};       // 대상 창이 다른 창에 가려졌는지 여부
 };
 
 /**
@@ -75,7 +76,8 @@ public:
     /**
      * @brief 캡처 스레드 시작
      * 
-     * DXGI를 먼저 시도하고, 실패 시 GDI로 폴백합니다.
+    * 일반 윈도우는 PrintWindow 기반 GDI 캡처를 우선 시도하고, 실패 시 DXGI로 폴백합니다.
+    * 전체 화면(Desktop) 캡처는 DXGI를 기본으로 사용합니다.
      * 
      * @param targetWindow 캡처할 윈도우 핸들
      * @return 시작 성공 시 true, 실패 시 false
