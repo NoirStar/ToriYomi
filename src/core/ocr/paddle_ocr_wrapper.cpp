@@ -105,6 +105,17 @@ bool PaddleOcrWrapper::Runtime::Initialize(const PaddleOcrOptions& options) {
     params.cpu_threads = std::max(1, options.cpuThreads);
     params.thread_num = 1;
 
+    // 텍스트 감지 파라미터 (줄 분리 조정용)
+    if (options.detThresh) {
+        params.text_det_thresh = options.detThresh.value();
+    }
+    if (options.detBoxThresh) {
+        params.text_det_box_thresh = options.detBoxThresh.value();
+    }
+    if (options.detUnclipRatio) {
+        params.text_det_unclip_ratio = options.detUnclipRatio.value();
+    }
+
     if (options.enableCls && !options.clsModelDir.empty()) {
         params.textline_orientation_model_dir = options.clsModelDir.string();
         params.textline_orientation_batch_size = options.recBatchSize;

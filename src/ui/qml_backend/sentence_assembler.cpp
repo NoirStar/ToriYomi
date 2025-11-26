@@ -1,11 +1,12 @@
 #include "ui/qml_backend/sentence_assembler.h"
 
 #include <QDateTime>
+#include <QSet>
+#include <QStringList>
 #include <QtGlobal>
 #include <algorithm>
 #include <cmath>
 #include <limits>
-#include <QStringList>
 #include <utility>
 
 namespace toriyomi {
@@ -80,8 +81,8 @@ void SentenceAssembler::Reset() {
     sentenceInFlight_.clear();
 }
 
-std::optional<QString> SentenceAssembler::TryAssemble(const SegmentList& segments,
-                                                      const std::function<void(const QString&)>& logCallback) {
+std::optional<AssembleResult> SentenceAssembler::TryAssemble(const SegmentList& segments,
+                                                             const std::function<void(const QString&)>& logCallback) {
     if (segments.empty()) {
         pendingSentence_.clear();
         pendingHits_ = 0;
@@ -120,9 +121,16 @@ std::optional<QString> SentenceAssembler::TryAssemble(const SegmentList& segment
         return std::nullopt;
     }
 
+    // 화면 변경 감지: 이전에 발행된 문장과 현재 문장이 크게 다르면 화면이 변경된 것으로 판단
+    const bool screenChanged = IsSignificantChange(combined, lastPublishedSentence_);
+
     pendingSentence_.clear();
     pendingHits_ = 0;
-    return combined;
+    
+    AssembleResult result;
+    result.text = combined;
+    result.isScreenChanged = screenChanged;
+    return result;
 }
 
 void SentenceAssembler::MarkSentenceInFlight(const QString& text) {
@@ -141,6 +149,60 @@ void SentenceAssembler::MarkSentencePublished(const QString& text) {
 
 int SentenceAssembler::RequiredStableFrames() const {
     return (captureIntervalSeconds_ <= 0.5) ? 1 : 2;
+}
+
+bool SentenceAssembler::IsSignificantChange(const QString& newText, const QString& oldText) const {
+    // 이전 문장이 없으면 변경 아님 (첫 문장)
+    if (oldText.isEmpty()) {
+        return false;
+    }
+    
+    // 새 문장이 비어있으면 변경으로 취급하지 않음
+    if (newText.isEmpty()) {
+        return false;
+    }
+    
+    // 동일하면 변경 아님
+    if (newText == oldText) {
+        return false;
+    }
+    
+    // 한 문장이 다른 문장을 포함하면 (추가 텍스트) 변경으로 취급하지 않음
+    if (newText.contains(oldText) || oldText.contains(newText)) {
+        return false;
+    }
+    
+    // Jaccard 유사도 계산: 공통 문자 비율이 30% 미만이면 화면 변경으로 판단
+    QSet<QChar> newChars;
+    QSet<QChar> oldChars;
+    
+    for (const QChar& ch : newText) {
+        if (!ch.isSpace()) {
+            newChars.insert(ch);
+        }
+    }
+    
+    for (const QChar& ch : oldText) {
+        if (!ch.isSpace()) {
+            oldChars.insert(ch);
+        }
+    }
+    
+    if (newChars.isEmpty() || oldChars.isEmpty()) {
+        return true;
+    }
+    
+    const int intersection = (newChars & oldChars).size();
+    const int unionSize = (newChars | oldChars).size();
+    
+    if (unionSize == 0) {
+        return true;
+    }
+    
+    const double similarity = static_cast<double>(intersection) / static_cast<double>(unionSize);
+    
+    // 유사도가 30% 미만이면 화면이 크게 변경된 것으로 판단
+    return similarity < 0.3;
 }
 
 std::vector<SentenceAssembler::NormalizedSegment> SentenceAssembler::NormalizeSegments(const SegmentList& segments) const {

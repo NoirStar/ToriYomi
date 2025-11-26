@@ -9,13 +9,21 @@
 namespace toriyomi {
 namespace ui {
 
+/**
+ * @brief TryAssemble 결과
+ */
+struct AssembleResult {
+    QString text;              // 조합된 문장
+    bool isScreenChanged;      // 화면이 크게 변경되었는지 여부
+};
+
 class SentenceAssembler {
 public:
     void SetCaptureIntervalSeconds(double seconds);
     void Reset();
 
-    std::optional<QString> TryAssemble(const std::vector<ocr::TextSegment>& segments,
-                                       const std::function<void(const QString&)>& logCallback);
+    std::optional<AssembleResult> TryAssemble(const std::vector<ocr::TextSegment>& segments,
+                                              const std::function<void(const QString&)>& logCallback);
 
     void MarkSentenceInFlight(const QString& text);
     void ClearSentenceInFlight(const QString& text);
@@ -42,6 +50,7 @@ private:
                                       const std::function<void(const QString&)>& logCallback);
 
     int RequiredStableFrames() const;
+    bool IsSignificantChange(const QString& newText, const QString& oldText) const;
 
     double captureIntervalSeconds_ = 1.0;
     QString pendingSentence_;

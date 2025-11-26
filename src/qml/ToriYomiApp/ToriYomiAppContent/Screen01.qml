@@ -11,6 +11,7 @@ Screen01Form {
     Component.onCompleted: {
         appBackend.logMessage.connect(onLogMessage)
         appBackend.sentenceDetected.connect(onSentenceDetected)
+        appBackend.screenChanged.connect(onScreenChanged)
         appBackend.processListChanged.connect(onProcessListChanged)
         appBackend.refreshProcessList()
         sentenceListModel.clear()
@@ -37,20 +38,48 @@ Screen01Form {
         }
     }
     
+    function onScreenChanged() {
+        // 화면이 변경되면 기존 문장 목록을 초기화
+        if (sentenceListModel) {
+            sentenceListModel.clear()
+        }
+        if (tokenListModel) {
+            tokenListModel.clear()
+        }
+        console.log("[Screen01] 화면 변경 감지 - 문장 목록 초기화")
+    }
+    
     function onSentenceDetected(originalText, tokens) {
-        appendSentence(originalText, tokens)
+        appendSentences(originalText, tokens)
     }
 
-    function appendSentence(originalText, tokens) {
+    function appendSentences(originalText, tokens) {
         if (!sentenceListModel) {
             return
         }
 
-        sentenceListModel.insert(0, {
-            "text": originalText,
-            "colorCode": "#fa9393",
-            "tokens": tokens
-        })
+        // 줄 단위로 분리하여 개별 문장으로 추가
+        var lines = originalText.split('\n')
+        console.log("[DEBUG] Original text:", originalText)
+        console.log("[DEBUG] Lines count:", lines.length)
+        for (var j = 0; j < lines.length; j++) {
+            console.log("[DEBUG] Line " + j + ":", lines[j])
+        }
+        var tokensPerLine = distributeTokens(lines, tokens)
+
+        // 역순으로 추가하여 원래 순서대로 보이도록 함
+        for (var i = lines.length - 1; i >= 0; i--) {
+            var line = lines[i].trim()
+            if (line.length === 0) {
+                continue
+            }
+
+            sentenceListModel.insert(0, {
+                "text": line,
+                "colorCode": "#fa9393",
+                "tokens": tokensPerLine[i] || []
+            })
+        }
 
         if (sentenceListModel.count > maxSentenceEntries) {
             sentenceListModel.remove(maxSentenceEntries, sentenceListModel.count - maxSentenceEntries)
@@ -60,6 +89,45 @@ Screen01Form {
             sentencesListView.currentIndex = 0
             sentencesListView.positionViewAtBeginning()
         }
+    }
+
+    // 토큰을 각 줄에 맞게 분배
+    function distributeTokens(lines, tokens) {
+        var result = []
+        for (var i = 0; i < lines.length; i++) {
+            result.push([])
+        }
+
+        if (!tokens || tokens.length === 0) {
+            return result
+        }
+
+        var tokenIndex = 0
+        for (var lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+            var line = lines[lineIdx].trim()
+            var lineTokens = []
+            var charPos = 0
+
+            while (tokenIndex < tokens.length && charPos < line.length) {
+                var token = tokens[tokenIndex]
+                var surface = token.surface || ""
+
+                // 현재 토큰이 이 줄에 포함되는지 확인
+                var foundPos = line.indexOf(surface, charPos)
+                if (foundPos !== -1 && foundPos <= charPos + 2) {
+                    lineTokens.push(token)
+                    charPos = foundPos + surface.length
+                    tokenIndex++
+                } else {
+                    // 토큰이 이 줄에 없으면 다음 줄로
+                    break
+                }
+            }
+
+            result[lineIdx] = lineTokens
+        }
+
+        return result
     }
 
     function updateTokenList(tokens) {

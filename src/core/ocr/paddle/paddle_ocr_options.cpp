@@ -161,6 +161,17 @@ std::optional<PaddleOcrOptions> PaddleOcrOptions::FromJsonFile(const std::filesy
         opts.enableTextlineOrientation = doc["enable_textline_orientation"].get<bool>();
     }
 
+    // 텍스트 감지 파라미터 (줄 분리 조정용)
+    if (doc.contains("det_thresh")) {
+        opts.detThresh = doc["det_thresh"].get<float>();
+    }
+    if (doc.contains("det_box_thresh")) {
+        opts.detBoxThresh = doc["det_box_thresh"].get<float>();
+    }
+    if (doc.contains("det_unclip_ratio")) {
+        opts.detUnclipRatio = doc["det_unclip_ratio"].get<float>();
+    }
+
     if (opts.detModelDir.empty() || opts.recModelDir.empty()) {
         errorMessage = "Paddle OCR config must contain det_model and rec_model";
         return std::nullopt;

@@ -21,17 +21,18 @@ Window {
     // 로그 추가 함수
     function addLog(message) {
         var timestamp = new Date().toLocaleTimeString('ko-KR')
-        logMessages.push("[" + timestamp + "] " + message)
-        logListModel.append({"text": "[" + timestamp + "] " + message})
+        var newMessage = "[" + timestamp + "] " + message
+        logMessages.push(newMessage)
+        logTextArea.text = logMessages.join("\n")
         
-        // 자동 스크롤
-        logListView.positionViewAtEnd()
+        // 자동 스크롤 (맨 아래로)
+        logTextArea.cursorPosition = logTextArea.text.length
     }
     
     // 로그 클리어
     function clearLogs() {
         logMessages = []
-        logListModel.clear()
+        logTextArea.text = ""
     }
     
     // 창이 닫힐 때 호출되는 핸들러
@@ -190,7 +191,7 @@ Window {
                 }
                 
                 Text {
-                    text: qsTr("총 %1개 로그").arg(logListModel.count)
+                    text: qsTr("총 %1개 로그").arg(logMessages.length)
                     color: "#ffffff"
                     font.family: "Maplestory OTF"
                     verticalAlignment: Text.AlignVCenter
@@ -207,38 +208,25 @@ Window {
                 border.width: 1
                 radius: 5
                 
-                ListView {
-                    id: logListView
+                ScrollView {
+                    id: logScrollView
                     anchors.fill: parent
                     anchors.margins: 5
                     clip: true
                     
-                    model: ListModel {
-                        id: logListModel
-                    }
-                    
-                    delegate: Rectangle {
-                        width: logListView.width
-                        height: logText.height + 10
-                        color: index % 2 === 0 ? "#2b2b2b" : "#333333"
-                        
-                        Text {
-                            id: logText
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.verticalCenter: parent.verticalCenter
-                            anchors.leftMargin: 5
-                            anchors.rightMargin: 5
-                            text: model.text
-                            color: "#00ff00"
-                            font.family: "Maplestory OTF"
-                            font.pixelSize: 12
-                            wrapMode: Text.Wrap
+                    TextArea {
+                        id: logTextArea
+                        readOnly: true
+                        selectByMouse: true
+                        selectByKeyboard: true
+                        color: "#00ff00"
+                        font.family: "Consolas"
+                        font.pixelSize: 12
+                        wrapMode: Text.Wrap
+                        background: Rectangle {
+                            color: "transparent"
                         }
-                    }
-                    
-                    ScrollBar.vertical: ScrollBar {
-                        policy: ScrollBar.AlwaysOn
+                        text: logMessages.join("\n")
                     }
                 }
             }

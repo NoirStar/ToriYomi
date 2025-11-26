@@ -33,6 +33,11 @@ struct PaddleOcrOptions {
     bool enableDocOrientation = false;
     bool enableTextlineOrientation = false;
 
+    // 텍스트 감지 파라미터 (줄 분리 조정용)
+    std::optional<float> detThresh;       // 감지 임계값 (기본: 0.3)
+    std::optional<float> detBoxThresh;    // 박스 임계값 (기본: 0.6)
+    std::optional<float> detUnclipRatio;  // 박스 확장 비율 (기본: 2.0, 낮추면 줄 분리됨)
+
     static PaddleOcrOptions FromModelRoot(const std::filesystem::path& root,
                                           const std::string& language);
     static std::optional<PaddleOcrOptions> FromJsonFile(const std::filesystem::path& jsonPath,

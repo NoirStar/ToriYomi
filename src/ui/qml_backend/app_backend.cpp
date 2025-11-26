@@ -889,7 +889,14 @@ void AppBackend::OnPollOcrResults() {
         return;
     }
 
-    DispatchSentenceForTokenization(*assembled);
+    // 화면이 크게 변경되었으면 screenChanged 시그널 발생
+    if (assembled->isScreenChanged) {
+        emit screenChanged();
+        emit logMessage(QString("[%1] 화면 변경 감지 - 새로운 화면으로 전환")
+            .arg(CurrentTimestamp()));
+    }
+
+    DispatchSentenceForTokenization(assembled->text);
 }
 
 void AppBackend::InitializeEngines() {

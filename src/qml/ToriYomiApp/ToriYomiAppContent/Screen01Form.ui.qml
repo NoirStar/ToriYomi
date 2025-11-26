@@ -154,16 +154,24 @@ Rectangle {
                 anchors.fill: parent
                 anchors.margins: 15
                 clip: true
-                spacing: 5
+                spacing: 8
                 model: sentenceListModel
                 ScrollBar.vertical: ScrollBar {
                     policy: ScrollBar.AsNeeded
                 }
 
                 delegate: Item {
+                    id: sentenceDelegate
                     width: sentencesListView.width
-                    height: screen01Form.japaneseFontSize + 12
+                    // 높이 계산: 토큰이 있으면 Flow 높이, 없으면 fallback 텍스트 높이
+                    height: Math.max(
+                        hasTokens ? tokenFlow.height + 16 : fallbackText.contentHeight + 16,
+                        screen01Form.japaneseFontSize + 16
+                    )
                     property bool selected: ListView.isCurrentItem
+                    property var tokenList: model.tokens || []
+                    property bool hasTokens: tokenList && tokenList.length > 0
+                    property string sentenceText: model.text || ""
 
                     Rectangle {
                         anchors.fill: parent
@@ -190,14 +198,118 @@ Rectangle {
                             radius: 2
                         }
 
-                        Text {
-                            text: model.text
-                            color: "#ffffff"
-                            font.pixelSize: screen01Form.japaneseFontSize
-                            font.family: "IPAexGothic"
-                            verticalAlignment: Text.AlignVCenter
+                        // 토큰이 있으면 Flow로 표시, 없으면 일반 텍스트로 표시
+                        Item {
                             width: sentencesListView.width - 40
-                            wrapMode: Text.Wrap
+                            height: parent.height
+
+                            // 토큰이 없을 때 보여줄 일반 텍스트
+                            Text {
+                                id: fallbackText
+                                visible: !sentenceDelegate.hasTokens
+                                text: sentenceDelegate.sentenceText
+                                color: "#ffffff"
+                                font.pixelSize: screen01Form.japaneseFontSize
+                                font.family: "IPAexGothic"
+                                verticalAlignment: Text.AlignVCenter
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: parent.width
+                                wrapMode: Text.Wrap
+                            }
+
+                            // 토큰 기반 Flow 레이아웃
+                            Flow {
+                                id: tokenFlow
+                                visible: sentenceDelegate.hasTokens
+                                width: parent.width
+                                anchors.verticalCenter: parent.verticalCenter
+                                spacing: 2
+
+                                Repeater {
+                                    model: sentenceDelegate.tokenList
+
+                                    delegate: Item {
+                                        id: tokenItem
+                                        width: tokenText.width + 2
+                                        height: tokenText.height + 4
+                                        
+                                        // modelData가 객체일 수 있으므로 안전하게 접근
+                                        property string surfaceText: modelData ? (modelData.surface || "") : ""
+                                        property string readingText: modelData ? (modelData.reading || "") : ""
+                                        property string baseFormText: modelData ? (modelData.baseForm || "") : ""
+                                        property string posText: modelData ? (modelData.partOfSpeech || "") : ""
+                                        property bool isHovered: tokenMouseArea.containsMouse
+                                        
+                                        Text {
+                                            id: tokenText
+                                            text: surfaceText
+                                            color: isHovered ? "#ffdd88" : "#ffffff"
+                                            font.pixelSize: screen01Form.japaneseFontSize
+                                            font.family: "IPAexGothic"
+                                            
+                                            Behavior on color {
+                                                ColorAnimation { duration: 150 }
+                                            }
+                                        }
+                                        
+                                        // 밑줄 (hover 시 표시)
+                                        Rectangle {
+                                            id: underline
+                                            anchors.bottom: tokenText.bottom
+                                            anchors.bottomMargin: -2
+                                            anchors.horizontalCenter: tokenText.horizontalCenter
+                                            width: isHovered ? tokenText.width : 0
+                                            height: 2
+                                            color: "#ffdd88"
+                                            radius: 1
+                                            
+                                            Behavior on width {
+                                                NumberAnimation { duration: 150; easing.type: Easing.OutQuad }
+                                            }
+                                        }
+                                        
+                                        MouseArea {
+                                            id: tokenMouseArea
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            
+                                            // 툴팁 표시를 위한 타이머
+                                            onContainsMouseChanged: {
+                                                if (containsMouse) {
+                                                    tooltipTimer.start()
+                                                } else {
+                                                    tooltipTimer.stop()
+                                                    wordTooltip.visible = false
+                                                }
+                                            }
+                                            
+                                            Timer {
+                                                id: tooltipTimer
+                                                interval: 300
+                                                onTriggered: {
+                                                    if (tokenMouseArea.containsMouse && surfaceText.length > 0) {
+                                                        // 툴팁에 현재 토큰 정보 설정
+                                                        wordTooltip.surface = surfaceText
+                                                        wordTooltip.reading = readingText
+                                                        wordTooltip.baseForm = baseFormText
+                                                        wordTooltip.partOfSpeech = posText
+                                                        wordTooltip.visible = true
+                                                        
+                                                        // 툴팁 위치 계산
+                                                        var globalPos = tokenItem.mapToItem(sentencesListView, 0, 0)
+                                                        wordTooltip.x = Math.max(5, Math.min(globalPos.x, sentencesListView.width - wordTooltip.width - 10))
+                                                        wordTooltip.y = globalPos.y - wordTooltip.height - 5
+                                                        if (wordTooltip.y < 0) {
+                                                            wordTooltip.y = globalPos.y + tokenItem.height + 5
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
 
@@ -205,7 +317,78 @@ Rectangle {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: sentencesListView.currentIndex = index
+                        propagateComposedEvents: true
+                        z: -1
+                        onClicked: function(mouse) {
+                            sentencesListView.currentIndex = index
+                            mouse.accepted = false
+                        }
+                    }
+                }
+                
+                // 단어 툴팁
+                Rectangle {
+                    id: wordTooltip
+                    visible: false
+                    width: tooltipContent.width + 20
+                    height: tooltipContent.height + 16
+                    color: Qt.rgba(0.12, 0.11, 0.15, 0.95)
+                    radius: 8
+                    border.color: Qt.rgba(1, 1, 1, 0.2)
+                    border.width: 1
+                    z: 1000
+                    
+                    // 개별 속성으로 저장
+                    property string surface: ""
+                    property string reading: ""
+                    property string baseForm: ""
+                    property string partOfSpeech: ""
+                    
+                    Column {
+                        id: tooltipContent
+                        anchors.centerIn: parent
+                        spacing: 4
+                        
+                        // 표면형 + 읽기
+                        Row {
+                            spacing: 8
+                            
+                            Text {
+                                text: wordTooltip.surface
+                                color: "#ffdd88"
+                                font.pixelSize: 16
+                                font.family: "IPAexGothic"
+                                font.bold: true
+                            }
+                            
+                            Text {
+                                text: wordTooltip.reading.length > 0 ? "【" + wordTooltip.reading + "】" : ""
+                                color: "#bbbbbb"
+                                font.pixelSize: 14
+                                font.family: "IPAexGothic"
+                                visible: wordTooltip.reading.length > 0
+                            }
+                        }
+                        
+                        // 기본형
+                        Text {
+                            text: wordTooltip.baseForm.length > 0 && wordTooltip.baseForm !== wordTooltip.surface ?
+                                  qsTr("기본형: %1").arg(wordTooltip.baseForm) : ""
+                            color: "#aaaaaa"
+                            font.pixelSize: 12
+                            font.family: "Maplestory OTF"
+                            visible: wordTooltip.baseForm.length > 0 && wordTooltip.baseForm !== wordTooltip.surface
+                        }
+                        
+                        // 품사
+                        Text {
+                            text: wordTooltip.partOfSpeech.length > 0 ?
+                                  qsTr("품사: %1").arg(wordTooltip.partOfSpeech) : ""
+                            color: "#888888"
+                            font.pixelSize: 11
+                            font.family: "Maplestory OTF"
+                            visible: wordTooltip.partOfSpeech.length > 0
+                        }
                     }
                 }
             }

@@ -78,6 +78,7 @@ signals:
     void statusMessageChanged();
     void logMessage(const QString& message);
     void sentenceDetected(const QString& originalText, const QVariantList& tokens);
+    void screenChanged();  // 화면이 크게 변경되었을 때 발생
     void previewImageDataChanged();
     void captureIntervalSecondsChanged();
     void ocrEngineTypeChanged();
